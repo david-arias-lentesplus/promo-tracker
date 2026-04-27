@@ -1,0 +1,14 @@
+# ─── Data Processing ──────────────────────────────────────────
+# pandas es opcional — si no está disponible, raw_data.py usa csv nativo
+# pandas==2.2.2
+
+# ─── Scraping (para Analytics) ────────────────────────────────
+requests==2.31.0
+beautifulsoup4==4.12.3
+lxml==5.2.1
+
+# ─── Utils ────────────────────────────────────────────────────
+python-dateutil==2.9.0
+
+# Nota: JWT se implementa en api/_jwt_utils.py con stdlib pura (hmac + hashlib)
+# No se requiere PyJWT.

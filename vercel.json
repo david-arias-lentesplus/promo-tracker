@@ -1,0 +1,57 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/login.py",
+      "use": "@vercel/python",
+      "config": {
+        "includeFiles": ["api/_*.py", "data/users.json"]
+      }
+    },
+    {
+      "src": "api/raw_data.py",
+      "use": "@vercel/python",
+      "config": {
+        "includeFiles": ["api/_*.py", "data/url_sku_images.csv"]
+      }
+    },
+    {
+      "src": "api/stats.py",
+      "use": "@vercel/python",
+      "config": {
+        "includeFiles": ["api/_*.py", "data/url_sku_images.csv"]
+      }
+    },
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/$1.py"
+    },
+    {
+      "src": "/(.*\\.(js|css|png|jpg|jpeg|svg|ico|woff|woff2|ttf|map))",
+      "dest": "/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin",  "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Authorization, Content-Type" }
+      ]
+    }
+  ]
+}

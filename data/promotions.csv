@@ -1,0 +1,4 @@
+sku,nombre_producto,fabricante,precio_original,precio_promo,descuento_pct,tipo_promo,fecha_inicio,fecha_fin,url_producto
+DEMO-001,Producto Demo 1,Fabricante A,19990,14990,0.25,descuento_pct,2026-04-01,2026-05-31,https://tu-tienda.com/producto/demo-001
+DEMO-002,Producto Demo 2,Fabricante B,9990,7990,0.20,descuento_pct,2026-04-15,2026-05-15,https://tu-tienda.com/producto/demo-002
+DEMO-003,Producto Demo 3,Fabricante A,49990,39990,0.20,precio_fijo,2026-03-01,2026-06-30,https://tu-tienda.com/producto/demo-003

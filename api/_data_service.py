@@ -1,0 +1,222 @@
+"""
+📄 /api/_data_service.py  — Servicio compartido de datos CSV
+Descarga, parsea y filtra el CSV maestro de Google Drive.
+Importado por raw_data.py, stats.py y otros endpoints.
+"""
+import csv, io, os, re, urllib.request
+from datetime import datetime, date as _date
+
+try:
+    import requests as _requests
+except ImportError:
+    _requests = None
+
+# ─── Config ───────────────────────────────────────────────────
+GDRIVE_FILE_ID  = "1fs86vREGrlU3KNqYPWKw8-qnthNFWoQU"
+GDRIVE_DOWNLOAD = (
+    f"https://drive.google.com/uc?export=download&id={GDRIVE_FILE_ID}&confirm=t"
+)
+
+# Mapeo código → nombre de país
+COUNTRY_NAMES = {
+    'AR': 'Argentina',
+    'CL': 'Chile',
+    'CO': 'Colombia',
+    'GL': 'Galileo',
+    'MX': 'México',
+}
+
+# Módulo-level cache de imágenes (persiste en el mismo proceso)
+_IMAGE_CACHE:  dict = {}
+_IMAGE_LOADED: bool = False
+
+# ─── Helpers internos ─────────────────────────────────────────
+
+def _project_root() -> str:
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _parse_js_date(s: str):
+    """
+    Parsea fechas en múltiples formatos:
+      · JS Date.toString(): 'Wed Nov 01 2023 00:00:00 GMT-0500 (Colombia Standard Time)'
+      · ISO:                 '2023-11-01'
+      · d/m/Y:               '01/11/2023'
+    Retorna datetime.date o None.
+    """
+    if not s or not s.strip():
+        return None
+    s = s.strip()
+    # ISO
+    for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%m-%Y'):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            pass
+    # JS format: cualquier cosa que tenga "Mmm DD YYYY"
+    m = re.search(r'([A-Za-z]{3})\s+(\d{1,2})\s+(\d{4})', s)
+    if m:
+        try:
+            return datetime.strptime(f"{m.group(1)} {m.group(2)} {m.group(3)}", '%b %d %Y').date()
+        except ValueError:
+            pass
+    return None
+
+
+def _parse_discount(val) -> float:
+    try:
+        v = float(str(val).replace('%', '').strip())
+        return v if v <= 1 else v / 100
+    except Exception:
+        return 0.0
+
+
+# ─── Carga de imágenes ────────────────────────────────────────
+
+def load_image_map() -> dict:
+    global _IMAGE_CACHE, _IMAGE_LOADED
+    if _IMAGE_LOADED:
+        return _IMAGE_CACHE
+    path = os.path.join(_project_root(), 'data', 'url_sku_images.csv')
+    try:
+        with open(path, 'r', encoding='utf-8', errors='replace') as f:
+            for row in csv.DictReader(f):
+                sku = str(row.get('sku', '')).strip()
+                url = str(row.get('url_image', '')).strip()
+                if sku and url:
+                    _IMAGE_CACHE[sku]        = url
+                    _IMAGE_CACHE[sku.upper()] = url
+                    _IMAGE_CACHE[sku.lower()] = url
+        _IMAGE_LOADED = True
+    except Exception as e:
+        print(f"[_data_service] Error cargando imágenes: {e}")
+    return _IMAGE_CACHE
+
+
+# ─── Descarga CSV ─────────────────────────────────────────────
+
+def fetch_csv_text() -> str:
+    hdrs = {
+        'User-Agent': 'Mozilla/5.0 (compatible; PromoTracker/1.0)',
+        'Accept':     'text/csv,text/plain,*/*',
+    }
+    if _requests:
+        r = _requests.get(GDRIVE_DOWNLOAD, headers=hdrs, timeout=25, allow_redirects=True)
+        r.raise_for_status()
+        text = r.text
+    else:
+        req = urllib.request.Request(GDRIVE_DOWNLOAD, headers=hdrs)
+        with urllib.request.urlopen(req, timeout=25) as resp:
+            text = resp.read().decode('utf-8', errors='replace')
+    # Normalizar line endings (\r\n → \n)
+    return text.replace('\r\n', '\n').replace('\r', '\n')
+
+
+# ─── Parseo CSV → lista de registros ─────────────────────────
+
+def parse_csv(raw_text: str, image_map: dict) -> list:
+    reader  = csv.DictReader(io.StringIO(raw_text, newline=''))
+    records = []
+    for i, row in enumerate(reader):
+        sku = str(row.get('SKU', '')).strip()
+        img = (
+            image_map.get(sku)
+            or image_map.get(sku.upper())
+            or image_map.get(sku.lower())
+            or ''
+        )
+        disc_raw   = _parse_discount(row.get('Total descuentos', 0))
+        bu         = str(row.get('Business Unit', '')).strip()
+        ds_raw     = str(row.get('Date Start', '')).strip()
+        de_raw     = str(row.get('Date End',   '')).strip()
+        ds_parsed  = _parse_js_date(ds_raw)
+        de_parsed  = _parse_js_date(de_raw)
+
+        records.append({
+            'id':             i + 1,
+            'sku':            sku,
+            'product_name':   str(row.get('Product Name',    '')).strip(),
+            'fabricante':     str(row.get('Fabricante',      '')).strip(),
+            'proveedor':      str(row.get('Proveedor',       '')).strip(),
+            'business_unit':  bu,
+            'pais':           bu,   # Business Unit contiene código de país
+            'pais_nombre':    COUNTRY_NAMES.get(bu, bu),
+            'status':         str(row.get('Activo a hoy',    '')).strip(),
+            'date_start':     ds_parsed.isoformat() if ds_parsed else ds_raw[:20],
+            'date_end':       de_parsed.isoformat() if de_parsed else de_raw[:20],
+            '_date_start_d':  ds_parsed,  # objeto date para filtros
+            '_date_end_d':    de_parsed,
+            'tipo_campana':   str(row.get('Tipo Campaña',    '')).strip(),
+            'nombre_campana': str(row.get('Nombre Campaña',  '')).strip(),
+            'promo_marca':    str(row.get('Promocion marca', '')).strip(),
+            'qty_max':        str(row.get('Qty Max promo',   '')).strip(),
+            'desc_marca':     _parse_discount(row.get('Descuento marca',  0)),
+            'desc_propio':    _parse_discount(row.get('Descuento propio', 0)),
+            'total_desc':     disc_raw,
+            'total_desc_pct': round(disc_raw * 100, 1),
+            'tipo_promo':     str(row.get('Tipo promo pagina', '')).strip(),
+            'url_image':      img,
+        })
+    return records
+
+
+def strip_internal(record: dict) -> dict:
+    """Elimina campos internos '_*' antes de serializar a JSON."""
+    return {k: v for k, v in record.items() if not k.startswith('_')}
+
+
+# ─── Filtros ──────────────────────────────────────────────────
+
+def apply_filters(
+    records:   list,
+    country:   str = '',
+    date_from: str = '',
+    date_to:   str = '',
+    search:    str = '',
+    status:    str = '',
+) -> list:
+    out = records
+
+    # 1. País (Business Unit)
+    if country and country.lower() not in ('all', 'todos', ''):
+        out = [r for r in out if r['pais'].lower() == country.lower()]
+
+    # 2. Rango de fechas (solapamiento): promo_start ≤ filter_end AND promo_end ≥ filter_start
+    df = _parse_js_date(date_from) if date_from else None
+    dt = _parse_js_date(date_to)   if date_to   else None
+    if df or dt:
+        filtered = []
+        for r in out:
+            ps = r.get('_date_start_d')
+            pe = r.get('_date_end_d')
+            start_ok = (ps is None or dt is None or ps <= dt)
+            end_ok   = (pe is None or df is None or pe >= df)
+            if start_ok and end_ok:
+                filtered.append(r)
+        out = filtered
+
+    # 3. Estado
+    if status and status.lower() not in ('all', ''):
+        out = [r for r in out if r['status'].lower() == status.lower()]
+
+    # 4. Búsqueda
+    if search:
+        q = search.lower()
+        out = [r for r in out
+               if q in r['sku'].lower()
+               or q in r['product_name'].lower()
+               or q in r['fabricante'].lower()
+               or q in r['nombre_campana'].lower()]
+
+    return out
+
+
+def get_unique_countries(records: list) -> list:
+    """Retorna lista ordenada de {code, name} — solo códigos de país conocidos."""
+    seen = {}
+    for r in records:
+        code = r.get('pais', '').strip()
+        # Solo incluir si es un código de país válido (en COUNTRY_NAMES)
+        if code and code in COUNTRY_NAMES and code not in seen:
+            seen[code] = COUNTRY_NAMES[code]
+    return [{'code': c, 'name': n} for c, n in sorted(seen.items())]
