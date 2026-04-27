@@ -118,7 +118,13 @@ def parse_csv(raw_text: str, image_map: dict) -> list:
     reader  = csv.DictReader(io.StringIO(raw_text, newline=''))
     records = []
     for i, row in enumerate(reader):
+        # ── Filtrar filas inválidas (subtotales de Excel con Date Start vacío) ──
+        if not str(row.get('Date Start', '')).strip():
+            continue
         sku = str(row.get('SKU', '')).strip()
+        # Filtrar también si el SKU es un nombre de BU (Avizor, Cooper Vision, Opharm)
+        if not sku or len(sku) < 3 or sku in ('Avizor', 'Cooper Vision', 'Opharm'):
+            continue
         img = (
             image_map.get(sku)
             or image_map.get(sku.upper())
