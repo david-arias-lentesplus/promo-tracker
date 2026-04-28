@@ -26,8 +26,9 @@ COUNTRY_NAMES = {
     'MX': 'México',
 }
 
-# Módulo-level cache de imágenes (persiste en el mismo proceso)
+# Módulo-level cache de imágenes y tipos (persiste en el mismo proceso)
 _IMAGE_CACHE:  dict = {}
+_TYPE_CACHE:   dict = {}   # sku -> type
 _IMAGE_LOADED: bool = False
 
 # ─── Helpers internos ─────────────────────────────────────────
@@ -74,7 +75,7 @@ def _parse_discount(val) -> float:
 # ─── Carga de imágenes ────────────────────────────────────────
 
 def load_image_map() -> dict:
-    global _IMAGE_CACHE, _IMAGE_LOADED
+    global _IMAGE_CACHE, _TYPE_CACHE, _IMAGE_LOADED
     if _IMAGE_LOADED:
         return _IMAGE_CACHE
     path = os.path.join(_project_root(), 'data', 'url_sku_images.csv')
@@ -83,14 +84,27 @@ def load_image_map() -> dict:
             for row in csv.DictReader(f):
                 sku = str(row.get('sku', '')).strip()
                 url = str(row.get('url_image', '')).strip()
-                if sku and url:
-                    _IMAGE_CACHE[sku]        = url
-                    _IMAGE_CACHE[sku.upper()] = url
-                    _IMAGE_CACHE[sku.lower()] = url
+                ptype = str(row.get('type', '')).strip()
+                if sku:
+                    if url:
+                        _IMAGE_CACHE[sku]        = url
+                        _IMAGE_CACHE[sku.upper()] = url
+                        _IMAGE_CACHE[sku.lower()] = url
+                    if ptype:
+                        _TYPE_CACHE[sku]        = ptype
+                        _TYPE_CACHE[sku.upper()] = ptype
+                        _TYPE_CACHE[sku.lower()] = ptype
         _IMAGE_LOADED = True
     except Exception as e:
         print(f"[_data_service] Error cargando imágenes: {e}")
     return _IMAGE_CACHE
+
+
+def get_type_map() -> dict:
+    """Retorna el mapa sku→type (cargado junto con load_image_map)."""
+    if not _IMAGE_LOADED:
+        load_image_map()
+    return _TYPE_CACHE
 
 
 # ─── Descarga CSV ─────────────────────────────────────────────
@@ -121,16 +135,25 @@ def parse_csv(raw_text: str, image_map: dict) -> list:
         # ── Filtrar filas inválidas (subtotales de Excel con Date Start vacío) ──
         if not str(row.get('Date Start', '')).strip():
             continue
-        sku = str(row.get('SKU', '')).strip()
-        # Filtrar también si el SKU es un nombre de BU (Avizor, Cooper Vision, Opharm)
-        if not sku or len(sku) < 3 or sku in ('Avizor', 'Cooper Vision', 'Opharm'):
-            continue
+
+        sku          = str(row.get('SKU',          '')).strip()
+        product_name = str(row.get('Product Name', '')).strip()
+
+        # Detectar filas de Gafas: "Gafas" en Product Name y sin SKU válido
+        is_gafas = 'gafas' in product_name.lower() and (not sku or len(sku) < 3)
+
+        # Filtrar filas inválidas: SKU vacío/corto o nombre de BU — salvo Gafas
+        if not is_gafas:
+            if not sku or len(sku) < 3 or sku in ('Avizor', 'Cooper Vision', 'Opharm'):
+                continue
+
         img = (
             image_map.get(sku)
             or image_map.get(sku.upper())
             or image_map.get(sku.lower())
             or ''
-        )
+        ) if sku else ''
+
         disc_raw   = _parse_discount(row.get('Total descuentos', 0))
         bu         = str(row.get('Business Unit', '')).strip()
         ds_raw     = str(row.get('Date Start', '')).strip()
@@ -138,10 +161,16 @@ def parse_csv(raw_text: str, image_map: dict) -> list:
         ds_parsed  = _parse_js_date(ds_raw)
         de_parsed  = _parse_js_date(de_raw)
 
+        # product_type: 'Gafas' directo para filas sin SKU, lookup desde _TYPE_CACHE para el resto
+        if is_gafas:
+            ptype = 'Gafas'
+        else:
+            ptype = (_TYPE_CACHE.get(sku) or _TYPE_CACHE.get(sku.upper()) or _TYPE_CACHE.get(sku.lower()) or '')
+
         records.append({
             'id':             i + 1,
             'sku':            sku,
-            'product_name':   str(row.get('Product Name',    '')).strip(),
+            'product_name':   product_name,
             'fabricante':     str(row.get('Fabricante',      '')).strip(),
             'proveedor':      str(row.get('Proveedor',       '')).strip(),
             'business_unit':  bu,
@@ -162,6 +191,7 @@ def parse_csv(raw_text: str, image_map: dict) -> list:
             'total_desc_pct': round(disc_raw * 100, 1),
             'tipo_promo':     str(row.get('Tipo promo pagina', '')).strip(),
             'url_image':      img,
+            'product_type':   ptype,
         })
     return records
 
@@ -180,6 +210,7 @@ def apply_filters(
     date_to:   str = '',
     search:    str = '',
     status:    str = '',
+    **kwargs,
 ) -> list:
     out = records
 
@@ -205,7 +236,12 @@ def apply_filters(
     if status and status.lower() not in ('all', ''):
         out = [r for r in out if r['status'].lower() == status.lower()]
 
-    # 4. Búsqueda
+    # 4. Tipo de producto
+    if kwargs.get('product_type', ''):
+        pt = kwargs['product_type'].lower()
+        out = [r for r in out if r.get('product_type','').lower() == pt]
+
+    # 5. Búsqueda
     if search:
         q = search.lower()
         out = [r for r in out
@@ -215,6 +251,16 @@ def apply_filters(
                or q in r['nombre_campana'].lower()]
 
     return out
+
+
+def get_unique_types(records: list) -> list:
+    """Retorna lista ordenada de tipos de producto únicos con promos activas."""
+    seen = set()
+    for r in records:
+        t = r.get('product_type', '').strip()
+        if t:
+            seen.add(t)
+    return sorted(seen)
 
 
 def get_unique_countries(records: list) -> list:

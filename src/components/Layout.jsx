@@ -100,8 +100,8 @@ const NAV_ITEMS = [
   { label: 'Dashboard', to: '/dashboard', icon: IconDashboard },
   { label: 'HS Info',   to: '/hs-info',   icon: IconInfo },
   { label: 'Campañas',  to: '/campaigns', icon: IconMegaphone },
-  { label: 'Raw Data',  to: '/raw-data',  icon: IconTable },
   { label: 'Analytics', to: '/analytics', icon: IconBarChart },
+  { label: 'Raw Data',  to: '/raw-data',  icon: IconTable },
 ]
 
 // ─── Sidebar ─────────────────────────────────────────────────

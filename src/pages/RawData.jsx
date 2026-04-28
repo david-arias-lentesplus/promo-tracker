@@ -141,7 +141,9 @@ export default function RawData() {
   const [loading,      setLoading]      = useState(true)
   const [error,        setError]        = useState('')
   const [search,       setSearch]       = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
+  const [statusFilter,  setStatusFilter]  = useState('')
+  const [typeFilter,    setTypeFilter]    = useState('')
+  const [availTypes,    setAvailTypes]    = useState([])
   const [page,         setPage]         = useState(1)
   const [lastUpdated,  setLastUpdated]  = useState(null)
 
@@ -149,14 +151,16 @@ export default function RawData() {
     const p = overrides.page   ?? page
     const s = overrides.search ?? search
     const f = overrides.status ?? statusFilter
+    const pt = overrides.product_type ?? typeFilter
     return new URLSearchParams({
       page:  p,
       limit: PAGE_SIZE,
-      ...(s        ? { search:    s        } : {}),
-      ...(f        ? { status:    f        } : {}),
-      ...(country  ? { country              } : {}),
-      ...(dateFrom ? { date_from: dateFrom  } : {}),
-      ...(dateTo   ? { date_to:   dateTo    } : {}),
+      ...(s        ? { search:       s        } : {}),
+      ...(f        ? { status:       f        } : {}),
+      ...(country  ? { country                } : {}),
+      ...(dateFrom ? { date_from:    dateFrom  } : {}),
+      ...(dateTo   ? { date_to:      dateTo    } : {}),
+      ...(pt       ? { product_type: pt        } : {}),
     })
   }, [page, search, statusFilter, country, dateFrom, dateTo])
 
@@ -166,6 +170,7 @@ export default function RawData() {
       const res = await apiRequest(`/raw_data?${buildParams(overrides)}`)
       setData(res.data || [])
       setMeta(res.meta || null)
+      if (res.meta?.unique_types) setAvailTypes(res.meta.unique_types)
       setLastUpdated(new Date())
     } catch (err) {
       setError(err.message || 'Error al cargar datos')
@@ -178,15 +183,16 @@ export default function RawData() {
   useEffect(() => { fetchData() }, [])   // eslint-disable-line
 
   // Re-fetch cuando cambian filtros globales
-  const prevGlobal = useRef({ country, dateFrom, dateTo })
+  const prevGlobal = useRef({ country, dateFrom, dateTo, typeFilter })
   useEffect(() => {
     const prev = prevGlobal.current
-    if (prev.country !== country || prev.dateFrom !== dateFrom || prev.dateTo !== dateTo) {
-      prevGlobal.current = { country, dateFrom, dateTo }
+    if (prev.country !== country || prev.dateFrom !== dateFrom || prev.dateTo !== dateTo
+        || prev.typeFilter !== typeFilter) {
+      prevGlobal.current = { country, dateFrom, dateTo, typeFilter }
       setPage(1)
       fetchData({ page: 1 })
     }
-  }, [country, dateFrom, dateTo])  // eslint-disable-line
+  }, [country, dateFrom, dateTo, typeFilter])  // eslint-disable-line
 
   // Debounce search local
   const searchMounted = useRef(false)
@@ -199,6 +205,11 @@ export default function RawData() {
   const handleStatusChange = (val) => {
     setStatusFilter(val); setPage(1)
     fetchData({ page: 1, search, status: val })
+  }
+
+  const handleTypeChange = (val) => {
+    setTypeFilter(val); setPage(1)
+    fetchData({ page: 1, search, status: statusFilter, product_type: val })
   }
   const handlePage = (p) => { setPage(p); fetchData({ page: p }) }
 
@@ -297,6 +308,20 @@ export default function RawData() {
             <option value="No Activo">No Activo</option>
           </select>
 
+          {/* Type filter */}
+          {availTypes.length > 0 && (
+            <select
+              value={typeFilter}
+              onChange={e => handleTypeChange(e.target.value)}
+              className="h-9 px-3 text-sm bg-gray-50 border border-gray-200 rounded-lg
+                         outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20
+                         text-gray-600 cursor-pointer"
+            >
+              <option value="">Todos los tipos</option>
+              {availTypes.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          )}
+
           {/* Indicadores filtros globales activos */}
           {(country || dateFrom || dateTo) && (
             <div className="flex items-center gap-1.5 flex-wrap">
@@ -326,7 +351,7 @@ export default function RawData() {
           <table className="w-full text-sm min-w-[1100px]">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/70">
-                {['Imagen','SKU','Producto','Fabricante','BU','Estado','Campaña','Promo Marca','Desc.','Tipo Promo','Vigencia'].map(col => (
+                {['Imagen','SKU','Producto','Fabricante','BU','Tipo','Estado','Campaña','Promo Marca','Desc.','Tipo Promo','Vigencia'].map(col => (
                   <th key={col} className="px-4 py-3 text-left text-xs font-semibold text-gray-400 tracking-wider uppercase whitespace-nowrap first:pl-5">
                     {col}
                   </th>
@@ -338,7 +363,7 @@ export default function RawData() {
                 Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} />)
               ) : data.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-5 py-16 text-center text-gray-400 text-sm">
+                  <td colSpan={12} className="px-5 py-16 text-center text-gray-400 text-sm">
                     {search ? `Sin resultados para "${search}"` : 'No hay datos disponibles'}
                   </td>
                 </tr>
@@ -377,6 +402,13 @@ export default function RawData() {
                     <td className="px-4 py-3">
                       {row.business_unit
                         ? <span className="badge-info">{row.business_unit}</span>
+                        : <span className="text-gray-400 text-xs">—</span>}
+                    </td>
+
+                    {/* Tipo de producto */}
+                    <td className="px-4 py-3">
+                      {row.product_type
+                        ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-100 whitespace-nowrap">{row.product_type}</span>
                         : <span className="text-gray-400 text-xs">—</span>}
                     </td>
 
