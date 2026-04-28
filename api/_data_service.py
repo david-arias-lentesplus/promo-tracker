@@ -29,6 +29,7 @@ COUNTRY_NAMES = {
 # Módulo-level cache de imágenes, tipos y uso (persiste en el mismo proceso)
 _IMAGE_CACHE:    dict = {}
 _TYPE_CACHE:     dict = {}   # sku -> type
+_URL_CACHE:      dict = {}   # sku -> product page url
 _USE_TYPE_CACHE: dict = {}   # sku -> use_type
 _USE_DUR_CACHE:  dict = {}   # sku -> use_duration
 _IMAGE_LOADED:   bool = False
@@ -78,21 +79,26 @@ def _parse_discount(val) -> float:
 # ─── Carga de imágenes ────────────────────────────────────────
 
 def load_image_map() -> dict:
-    global _IMAGE_CACHE, _TYPE_CACHE, _IMAGE_LOADED
+    global _IMAGE_CACHE, _TYPE_CACHE, _URL_CACHE, _IMAGE_LOADED
     if _IMAGE_LOADED:
         return _IMAGE_CACHE
     path = os.path.join(_project_root(), 'data', 'url_sku_images.csv')
     try:
         with open(path, 'r', encoding='utf-8', errors='replace') as f:
             for row in csv.DictReader(f):
-                sku = str(row.get('sku', '')).strip()
-                url = str(row.get('url_image', '')).strip()
-                ptype = str(row.get('type', '')).strip()
+                sku     = str(row.get('sku',       '')).strip()
+                img_url = str(row.get('url_image', '')).strip()
+                prod_url= str(row.get('url',       '')).strip()
+                ptype   = str(row.get('type',      '')).strip()
                 if sku:
-                    if url:
-                        _IMAGE_CACHE[sku]        = url
-                        _IMAGE_CACHE[sku.upper()] = url
-                        _IMAGE_CACHE[sku.lower()] = url
+                    if img_url:
+                        _IMAGE_CACHE[sku]        = img_url
+                        _IMAGE_CACHE[sku.upper()] = img_url
+                        _IMAGE_CACHE[sku.lower()] = img_url
+                    if prod_url:
+                        _URL_CACHE[sku]        = prod_url
+                        _URL_CACHE[sku.upper()] = prod_url
+                        _URL_CACHE[sku.lower()] = prod_url
                     if ptype:
                         _TYPE_CACHE[sku]        = ptype
                         _TYPE_CACHE[sku.upper()] = ptype
@@ -108,6 +114,13 @@ def get_type_map() -> dict:
     if not _IMAGE_LOADED:
         load_image_map()
     return _TYPE_CACHE
+
+
+def get_url_map() -> dict:
+    """Retorna el mapa sku→product_url (cargado junto con load_image_map)."""
+    if not _IMAGE_LOADED:
+        load_image_map()
+    return _URL_CACHE
 
 
 # ─── Carga de use_type / use_duration ────────────────────────
@@ -190,6 +203,14 @@ def parse_csv(raw_text: str, image_map: dict) -> list:
             or ''
         ) if sku else ''
 
+        url_map  = get_url_map()
+        prod_url = (
+            url_map.get(sku)
+            or url_map.get(sku.upper())
+            or url_map.get(sku.lower())
+            or ''
+        ) if sku else ''
+
         disc_raw   = _parse_discount(row.get('Total descuentos', 0))
         bu         = str(row.get('Business Unit', '')).strip()
         ds_raw     = str(row.get('Date Start', '')).strip()
@@ -227,6 +248,7 @@ def parse_csv(raw_text: str, image_map: dict) -> list:
             'total_desc_pct': round(disc_raw * 100, 1),
             'tipo_promo':     str(row.get('Tipo promo pagina', '')).strip(),
             'url_image':      img,
+            'product_url':    prod_url,
             'product_type':   ptype,
             'use_type':       _get_use(sku, _USE_TYPE_CACHE),
             'use_duration':   _get_use(sku, _USE_DUR_CACHE),

@@ -189,7 +189,13 @@ function BestSellerSection({ data, selectedIds, onToggle }) {
                     </div>
                     <ProductThumb url={p.url_image} name={p.product_name} size="lg" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-bold text-gray-800 leading-snug line-clamp-2">{p.product_name}</p>
+                      {p.product_url
+                        ? <a href={p.product_url} target="_blank" rel="noopener noreferrer"
+                              className="text-xs font-bold text-[#0000E1] leading-snug line-clamp-2 hover:underline block">
+                            {p.product_name}
+                          </a>
+                        : <p className="text-xs font-bold text-gray-800 leading-snug line-clamp-2">{p.product_name}</p>
+                      }
                       {p.sku && <p className="text-[11px] text-gray-400 font-mono mt-0.5">{p.sku}</p>}
                       <p className="text-xs font-semibold text-gray-500 mt-0.5 truncate">{p.fabricante}</p>
                       {p.product_type && (
@@ -315,7 +321,13 @@ function FabricantesSection({ data, selectedGroupIds, onToggleGroup, brandFilter
                       <div key={p.sku || p.product_name} className="flex items-center gap-2 bg-gray-50 rounded-lg px-2.5 py-1.5 border border-gray-100">
                         <ProductThumb url={p.url_image} name={p.product_name} />
                         <div>
-                          <p className="text-[11px] font-bold text-gray-700 max-w-[120px] truncate">{p.product_name}</p>
+                          {p.product_url
+                            ? <a href={p.product_url} target="_blank" rel="noopener noreferrer"
+                                  className="text-[11px] font-bold text-[#0000E1] max-w-[120px] truncate hover:underline block">
+                                {p.product_name}
+                              </a>
+                            : <p className="text-[11px] font-bold text-gray-700 max-w-[120px] truncate">{p.product_name}</p>
+                          }
                           {p.sku && <p className="text-[10px] text-gray-400 font-mono">{p.sku}</p>}
                           <UseBadges use_type={p.use_type} use_duration={p.use_duration} />
                         </div>
@@ -393,7 +405,13 @@ function GafasSection({ data, selectedGroupIds, onToggleGroup }) {
                     <div key={p.sku || p.product_name} className="flex items-center gap-2 bg-gray-50 rounded-lg px-2.5 py-1.5 border border-gray-100">
                       <ProductThumb url={p.url_image} name={p.product_name} />
                       <div>
-                        <p className="text-[11px] font-bold text-gray-700 max-w-[140px] truncate">{p.product_name}</p>
+                        {p.product_url
+                          ? <a href={p.product_url} target="_blank" rel="noopener noreferrer"
+                                className="text-[11px] font-bold text-[#0000E1] max-w-[140px] truncate hover:underline block">
+                              {p.product_name}
+                            </a>
+                          : <p className="text-[11px] font-bold text-gray-700 max-w-[140px] truncate">{p.product_name}</p>
+                        }
                         {p.sku && <p className="text-[10px] text-gray-400 font-mono">{p.sku}</p>}
                         <UseBadges use_type={p.use_type} use_duration={p.use_duration} />
                       </div>

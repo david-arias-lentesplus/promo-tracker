@@ -391,9 +391,15 @@ export default function RawData() {
                     </td>
 
                     <td className="px-4 py-3 max-w-[180px]">
-                      <p className="text-gray-700 font-medium text-xs leading-snug line-clamp-2">
-                        {row.product_name || '—'}
-                      </p>
+                      {row.product_url
+                        ? <a href={row.product_url} target="_blank" rel="noopener noreferrer"
+                            className="text-[#0000E1] font-medium text-xs leading-snug line-clamp-2 hover:underline">
+                            {row.product_name || '—'}
+                          </a>
+                        : <p className="text-gray-700 font-medium text-xs leading-snug line-clamp-2">
+                            {row.product_name || '—'}
+                          </p>
+                      }
                     </td>
 
                     <td className="px-4 py-3 text-gray-500 text-xs max-w-[120px]">

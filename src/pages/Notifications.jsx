@@ -94,9 +94,16 @@ function NotifCard({ item, isRead, onMarkRead }) {
           )}
         </div>
 
-        <p className="text-sm font-bold text-gray-900 mt-1.5 leading-snug truncate" title={item.product_name}>
-          {item.product_name}
-        </p>
+        {item.product_url
+          ? <a href={item.product_url} target="_blank" rel="noopener noreferrer"
+                className="text-sm font-bold text-[#0000E1] mt-1.5 leading-snug truncate hover:underline block"
+                title={item.product_name}>
+              {item.product_name}
+            </a>
+          : <p className="text-sm font-bold text-gray-900 mt-1.5 leading-snug truncate" title={item.product_name}>
+              {item.product_name}
+            </p>
+        }
 
         <div className="flex items-center gap-3 mt-1 flex-wrap">
           {item.sku && (

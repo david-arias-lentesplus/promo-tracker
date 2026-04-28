@@ -214,7 +214,13 @@ function SliderCard({ group }) {
               >
                 <ProductThumb url={p.url_image} name={p.product_name} />
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold text-gray-800 truncate">{p.product_name || '—'}</p>
+                  {p.product_url
+                    ? <a href={p.product_url} target="_blank" rel="noopener noreferrer"
+                          className="text-xs font-bold text-[#0000E1] truncate hover:underline block">
+                        {p.product_name || '—'}
+                      </a>
+                    : <p className="text-xs font-bold text-gray-800 truncate">{p.product_name || '—'}</p>
+                  }
                   <p className="text-[11px] text-gray-400 font-mono mt-0.5">{p.sku}</p>
                 </div>
                 {p.desc_pct > 0 && (

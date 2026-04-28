@@ -87,6 +87,26 @@
       }
     },
     {
+      "src": "api/analytics.py",
+      "use": "@vercel/python",
+      "config": {
+        "includeFiles": [
+          "api/_*.py",
+          "data/url_sku_images.csv",
+          "data/sku_use_data.csv"
+        ]
+      }
+    },
+    {
+      "src": "api/scraper.py",
+      "use": "@vercel/python",
+      "config": {
+        "includeFiles": [
+          "api/_*.py"
+        ]
+      }
+    },
+    {
       "src": "package.json",
       "use": "@vercel/static-build",
       "config": {
