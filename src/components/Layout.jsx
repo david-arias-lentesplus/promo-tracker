@@ -138,13 +138,6 @@ function Sidebar() {
         })()}
       </nav>
 
-      <div className="px-4 pb-4">
-        <button className="btn-lime w-full flex items-center justify-center gap-2 text-xs">
-          <IconPlay size={13} />
-          Ejecutar Auditoría
-        </button>
-      </div>
-
       <div className="px-4 pb-5 border-t border-white/10 pt-4">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">

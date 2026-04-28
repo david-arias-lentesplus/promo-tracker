@@ -36,19 +36,45 @@ def _users_data_path():
 # ─── User storage (dev: data/users.json · prod: /tmp/users.json) ─
 
 def _load_users_raw() -> dict:
-    """Returns the full users.json dict (with meta keys)."""
-    # /tmp takes priority (in-session writes on Vercel or dev)
+    """
+    Carga usuarios combinando data/users.json (fuente base, siempre committeada)
+    con /tmp/users.json (adiciones en runtime de Vercel).
+
+    Estrategia de merge:
+      · data/users.json  → fuente de verdad (usuarios committeados)
+      · /tmp/users.json  → usuarios creados via UI en runtime (efímeros por Lambda)
+    Los usuarios de data/ siempre están disponibles; los de /tmp se agregan encima.
+    Así un /tmp viejo (Lambda caliente) no oculta usuarios nuevos committeados.
+    """
+    # Leer fuente base (committeada al repo)
+    base: dict = {'users': []}
+    try:
+        with open(_users_data_path(), 'r', encoding='utf-8') as f:
+            base = json.load(f)
+    except Exception:
+        pass
+
+    # Agregar usuarios de /tmp que no existan en la base (creados en runtime)
     if os.path.exists('/tmp/users.json'):
         try:
             with open('/tmp/users.json', 'r', encoding='utf-8') as f:
-                return json.load(f)
+                tmp_data = json.load(f)
+            base_usernames = {u['username'] for u in base.get('users', [])}
+            base_ids       = {u.get('id','') for u in base.get('users', [])}
+            for u in tmp_data.get('users', []):
+                # Incluir solo si no está ya en la base (por username o id)
+                if u['username'] not in base_usernames and u.get('id','') not in base_ids:
+                    base.setdefault('users', []).append(u)
+                else:
+                    # Actualizar datos si el usuario base fue modificado en /tmp
+                    for i, bu in enumerate(base['users']):
+                        if bu['username'] == u['username']:
+                            base['users'][i] = u
+                            break
         except Exception:
             pass
-    try:
-        with open(_users_data_path(), 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception:
-        return {'users': []}
+
+    return base
 
 
 def _save_users_raw(data: dict) -> None:
