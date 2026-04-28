@@ -816,13 +816,11 @@ def scrape_tier_price(page, url: str, expected_pct: float, qty_max: int, debug_m
             log(5, 'No estamos en el carrito, intentando navegar directamente…', ok=False)
 
             # Derive cart URL
-            base = re.sub(r'(lentesplus\.com/\w{2})/', r'\1/', page.url)
             cart_url = re.sub(r'(lentesplus\.com/\w{2})(/.*)?', r'\1/carrito', page.url)
 
             if cart_url and cart_url != page.url:
                 try:
                     page.goto(cart_url, wait_until='domcontentloaded', timeout=20000)
-                    page.wait_for_timeout(2000)
                     log(5, f'Navegado a carrito: {page.url}')
                     snap('05_carrito_directo')
                 except Exception as e:
@@ -833,6 +831,33 @@ def scrape_tier_price(page, url: str, expected_pct: float, qty_max: int, debug_m
             log(5, f'Ya en carrito ✓')
 
         snap('05_carrito')
+
+        # ── Paso 5b: Esperar que el carrito cargue completamente ──
+        # La página es una SPA (React): los precios se renderizan de forma asíncrona.
+        # 1) networkidle: esperar a que no haya peticiones de red pendientes
+        try:
+            page.wait_for_load_state('networkidle', timeout=10000)
+            log(5, 'Network idle ✓')
+        except Exception:
+            log(5, 'Network idle timeout — continuando de todas formas', ok=False)
+
+        # 2) wait_for_selector: intentar el selector de precio del ítem (el más confiable)
+        price_sel_appeared = False
+        for _sel in [CART_ITEM_PRICE_SEL, '[class*="product-price"]',
+                     '[class*="priceSummary"]', '[class*="cartPage-items"]']:
+            try:
+                page.wait_for_selector(_sel, timeout=6000)
+                log(5, f'Selector de precio visible: {_sel}')
+                price_sel_appeared = True
+                break
+            except Exception:
+                continue
+
+        if not price_sel_appeared:
+            log(5, 'Ningún selector de precio apareció — esperando 4 s extra…', ok=False)
+            page.wait_for_timeout(4000)
+
+        snap('05_carrito_cargado')
 
         # ── Paso 6: Verificar que el carrito no está vacío ────────
         page_text = page.inner_text('body')
