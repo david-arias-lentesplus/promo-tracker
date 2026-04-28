@@ -1,8 +1,8 @@
 /**
  * 📄 /src/pages/Campaigns.jsx
  * Agente 1 — Frontend (Skill B)
- * Página modular de Email Marketing: BestSeller · Fabricantes · Gafas
- * Selección de productos, filtros por tipo/marca, email copy generado
+ * Layout: modelos en columna izquierda, filtros en sidebar derecha
+ * Tres modelos: BestSeller · Fabricantes · Gafas
  * Design System: LIVO
  */
 import React, { useState, useEffect, useRef, useCallback } from 'react'
@@ -36,12 +36,6 @@ const IconMail = ({ size = 18 }) => (
     <polyline points="22,6 12,13 2,6"/>
   </svg>
 )
-const IconStar = ({ size = 14 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" stroke="currentColor"
-    strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-  </svg>
-)
 const IconAlert = ({ size = 14 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
     strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -63,6 +57,12 @@ const IconTag = ({ size = 12 }) => (
     <line x1="7" y1="7" x2="7.01" y2="7"/>
   </svg>
 )
+const IconFilter = ({ size = 14 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+  </svg>
+)
 
 // ─── ProductThumb ─────────────────────────────────────────────
 function ProductThumb({ url, name, size = 'md' }) {
@@ -75,6 +75,24 @@ function ProductThumb({ url, name, size = 'md' }) {
   )
   return <img src={url} alt={name} onError={() => setErr(true)}
     className={`${cls} object-cover flex-shrink-0 border border-gray-100`} />
+}
+
+// ─── UseBadges ────────────────────────────────────────────────
+function UseBadges({ use_type, use_duration }) {
+  return (
+    <div className="flex items-center gap-1 flex-wrap mt-1">
+      {use_type && (
+        <span className="inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-teal-50 text-teal-700 border border-teal-100 whitespace-nowrap">
+          {use_type}
+        </span>
+      )}
+      {use_duration && (
+        <span className="inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-orange-50 text-orange-700 border border-orange-100 whitespace-nowrap">
+          {use_duration}
+        </span>
+      )}
+    </div>
+  )
 }
 
 // ─── CopyButton ───────────────────────────────────────────────
@@ -156,16 +174,15 @@ function BestSellerSection({ data, selectedIds, onToggle }) {
         <EmptyState msg="No hay promos activas en este período." />
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
             {products.map(p => {
               const sel = selectedIds.has(p.sku)
               return (
-                <div key={p.sku}
+                <div key={p.sku || p.product_name}
                   onClick={() => onToggle(p.sku)}
                   className={`card p-4 cursor-pointer transition-all duration-150 border-2
                     ${sel ? 'border-[#0000E1] bg-blue-50/40' : 'border-transparent hover:border-gray-200'}`}>
                   <div className="flex items-start gap-3">
-                    {/* Checkbox visual */}
                     <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all
                       ${sel ? 'bg-[#0000E1] border-[#0000E1]' : 'border-gray-300'}`}>
                       {sel && <IconCheck size={11}/>}
@@ -173,13 +190,14 @@ function BestSellerSection({ data, selectedIds, onToggle }) {
                     <ProductThumb url={p.url_image} name={p.product_name} size="lg" />
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-bold text-gray-800 leading-snug line-clamp-2">{p.product_name}</p>
-                      <p className="text-[11px] text-gray-400 font-mono mt-1">{p.sku}</p>
-                      <p className="text-xs font-semibold text-gray-500 mt-1 truncate">{p.fabricante}</p>
+                      {p.sku && <p className="text-[11px] text-gray-400 font-mono mt-0.5">{p.sku}</p>}
+                      <p className="text-xs font-semibold text-gray-500 mt-0.5 truncate">{p.fabricante}</p>
                       {p.product_type && (
-                        <span className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 text-purple-600 border border-purple-100">
+                        <span className="inline-flex mt-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 text-purple-600 border border-purple-100">
                           {p.product_type}
                         </span>
                       )}
+                      <UseBadges use_type={p.use_type} use_duration={p.use_duration} />
                     </div>
                   </div>
                   {p.promo_marca && (
@@ -243,7 +261,7 @@ function FabricantesSection({ data, selectedGroupIds, onToggleGroup, brandFilter
         <EmptyState msg="No hay promos activas para este fabricante en el período." />
       ) : (
         <div className="space-y-4">
-          {visible.map((group, i) => {
+          {visible.map((group) => {
             const gid = `${group.fabricante}|${group.promo_marca}|${group.date_start}`
             const sel = selectedGroupIds.has(gid)
             const expiring = group.is_expiring_soon
@@ -253,7 +271,6 @@ function FabricantesSection({ data, selectedGroupIds, onToggleGroup, brandFilter
                 className={`card overflow-hidden border-2 transition-all duration-150
                   ${sel ? 'border-[#0000E1]' : expiring ? 'border-amber-300' : 'border-transparent'}`}>
 
-                {/* Card header clickable */}
                 <div className={`px-5 py-4 flex items-start gap-3 cursor-pointer
                   ${expiring ? 'bg-amber-50/50' : 'bg-gray-50/50'}`}
                   onClick={() => onToggleGroup(gid)}>
@@ -300,6 +317,7 @@ function FabricantesSection({ data, selectedGroupIds, onToggleGroup, brandFilter
                         <div>
                           <p className="text-[11px] font-bold text-gray-700 max-w-[120px] truncate">{p.product_name}</p>
                           {p.sku && <p className="text-[10px] text-gray-400 font-mono">{p.sku}</p>}
+                          <UseBadges use_type={p.use_type} use_duration={p.use_duration} />
                         </div>
                       </div>
                     ))}
@@ -377,6 +395,7 @@ function GafasSection({ data, selectedGroupIds, onToggleGroup }) {
                       <div>
                         <p className="text-[11px] font-bold text-gray-700 max-w-[140px] truncate">{p.product_name}</p>
                         {p.sku && <p className="text-[10px] text-gray-400 font-mono">{p.sku}</p>}
+                        <UseBadges use_type={p.use_type} use_duration={p.use_duration} />
                       </div>
                     </div>
                   ))}
@@ -408,7 +427,7 @@ function EmptyState({ msg }) {
 // ─── Skeleton ─────────────────────────────────────────────────
 function Skeleton() {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       {Array.from({length: 6}).map((_,i) => (
         <div key={i} className="card p-4">
           <div className="flex gap-3">
@@ -425,53 +444,160 @@ function Skeleton() {
   )
 }
 
+// ─── Filter Sidebar ───────────────────────────────────────────
+function FilterSidebar({ meta, typeFilter, setTypeFilter, useTypeFilter, setUseTypeFilter,
+                          useDurFilter, setUseDurFilter, onApply }) {
+  const uniqueTypes     = meta?.unique_types          || []
+  const uniqueUseTypes  = meta?.unique_use_types      || []
+  const uniqueUseDurs   = meta?.unique_use_durations  || []
+
+  const hasFilters = typeFilter || useTypeFilter || useDurFilter
+  const clearAll = () => {
+    setTypeFilter(''); setUseTypeFilter(''); setUseDurFilter('')
+    onApply({ product_type: '', use_type: '', use_duration: '' })
+  }
+
+  const selectCls = "w-full h-9 px-3 text-sm bg-white border border-gray-200 rounded-lg outline-none focus:border-[#0000E1] text-gray-600 cursor-pointer"
+
+  return (
+    <aside className="w-56 flex-shrink-0">
+      <div className="card p-4 sticky top-4">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <IconFilter size={13}/>
+            <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Filtros</span>
+          </div>
+          {hasFilters && (
+            <button onClick={clearAll}
+              className="text-[11px] text-[#0000E1] font-semibold hover:underline">
+              Limpiar
+            </button>
+          )}
+        </div>
+
+        <div className="space-y-4">
+          {/* Tipo de producto */}
+          {uniqueTypes.length > 0 && (
+            <div>
+              <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
+                Tipo de producto
+              </label>
+              <select value={typeFilter}
+                onChange={e => { setTypeFilter(e.target.value); onApply({ product_type: e.target.value }) }}
+                className={selectCls}>
+                <option value="">Todos</option>
+                {uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+          )}
+
+          {/* Tipo de uso */}
+          {uniqueUseTypes.length > 0 && (
+            <div>
+              <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
+                Tipo de uso
+              </label>
+              <select value={useTypeFilter}
+                onChange={e => { setUseTypeFilter(e.target.value); onApply({ use_type: e.target.value }) }}
+                className={selectCls}>
+                <option value="">Todos</option>
+                {uniqueUseTypes.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+          )}
+
+          {/* Duración de uso */}
+          {uniqueUseDurs.length > 0 && (
+            <div>
+              <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
+                Duración de uso
+              </label>
+              <select value={useDurFilter}
+                onChange={e => { setUseDurFilter(e.target.value); onApply({ use_duration: e.target.value }) }}
+                className={selectCls}>
+                <option value="">Todas</option>
+                {uniqueUseDurs.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </div>
+          )}
+
+          {hasFilters && (
+            <div className="pt-2 border-t border-gray-100">
+              <p className="text-[11px] text-gray-400">Filtros activos:</p>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {typeFilter    && <span className="px-2 py-0.5 bg-purple-50 text-purple-700 text-[10px] rounded-full border border-purple-100">{typeFilter}</span>}
+                {useTypeFilter && <span className="px-2 py-0.5 bg-teal-50 text-teal-700 text-[10px] rounded-full border border-teal-100">{useTypeFilter}</span>}
+                {useDurFilter  && <span className="px-2 py-0.5 bg-orange-50 text-orange-700 text-[10px] rounded-full border border-orange-100">{useDurFilter}</span>}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </aside>
+  )
+}
+
 // ─── Main ─────────────────────────────────────────────────────
 export default function Campaigns() {
   const { country, dateFrom, dateTo } = useFilters()
 
-  const [activeTab,     setActiveTab]     = useState('bestseller')
-  const [campaignData,  setCampaignData]  = useState(null)
-  const [loading,       setLoading]       = useState(true)
-  const [error,         setError]         = useState('')
-  const [typeFilter,    setTypeFilter]    = useState('')
-  const [brandFilter,   setBrandFilter]   = useState('')
-  const [selectedBs,    setSelectedBs]    = useState(new Set())   // sku
-  const [selectedGroups,setSelectedGroups]= useState(new Set())   // group id
+  const [activeTab,      setActiveTab]      = useState('bestseller')
+  const [campaignData,   setCampaignData]   = useState(null)
+  const [loading,        setLoading]        = useState(true)
+  const [error,          setError]          = useState('')
+  const [typeFilter,     setTypeFilter]     = useState('')
+  const [useTypeFilter,  setUseTypeFilter]  = useState('')
+  const [useDurFilter,   setUseDurFilter]   = useState('')
+  const [brandFilter,    setBrandFilter]    = useState('')
+  const [selectedBs,     setSelectedBs]     = useState(new Set())
+  const [selectedGroups, setSelectedGroups] = useState(new Set())
 
-  const fetchData = useCallback(async () => {
+  const buildParams = (overrides = {}) => new URLSearchParams({
+    ...(country          ? { country                           } : {}),
+    ...(dateFrom         ? { date_from:    dateFrom            } : {}),
+    ...(dateTo           ? { date_to:      dateTo              } : {}),
+    ...((overrides.product_type ?? typeFilter)    ? { product_type: overrides.product_type ?? typeFilter    } : {}),
+    ...((overrides.use_type     ?? useTypeFilter) ? { use_type:     overrides.use_type     ?? useTypeFilter } : {}),
+    ...((overrides.use_duration ?? useDurFilter)  ? { use_duration: overrides.use_duration ?? useDurFilter  } : {}),
+  })
+
+  const fetchData = useCallback(async (overrides = {}) => {
     setLoading(true); setError('')
     try {
-      const params = new URLSearchParams({
-        ...(country     ? { country              } : {}),
-        ...(dateFrom    ? { date_from: dateFrom  } : {}),
-        ...(dateTo      ? { date_to:   dateTo    } : {}),
-        ...(typeFilter  ? { product_type: typeFilter } : {}),
-      })
-      const res = await apiRequest(`/campaigns?${params}`)
+      const res = await apiRequest(`/campaigns?${buildParams(overrides)}`)
       setCampaignData(res)
     } catch (err) {
       setError(err.message || 'Error cargando campañas')
     } finally {
       setLoading(false)
     }
-  }, [country, dateFrom, dateTo, typeFilter])
+  }, [country, dateFrom, dateTo, typeFilter, useTypeFilter, useDurFilter]) // eslint-disable-line
 
   useEffect(() => { fetchData() }, []) // eslint-disable-line
 
-  const prevRef = useRef({ country, dateFrom, dateTo, typeFilter })
+  const prevRef = useRef({ country, dateFrom, dateTo, typeFilter, useTypeFilter, useDurFilter })
   useEffect(() => {
     const p = prevRef.current
-    if (p.country!==country||p.dateFrom!==dateFrom||p.dateTo!==dateTo||p.typeFilter!==typeFilter) {
-      prevRef.current = { country, dateFrom, dateTo, typeFilter }
+    if (p.country!==country || p.dateFrom!==dateFrom || p.dateTo!==dateTo
+        || p.typeFilter!==typeFilter || p.useTypeFilter!==useTypeFilter || p.useDurFilter!==useDurFilter) {
+      prevRef.current = { country, dateFrom, dateTo, typeFilter, useTypeFilter, useDurFilter }
       setSelectedBs(new Set()); setSelectedGroups(new Set())
       fetchData()
     }
-  }, [country, dateFrom, dateTo, typeFilter, fetchData])
+  }, [country, dateFrom, dateTo, typeFilter, useTypeFilter, useDurFilter, fetchData])
+
+  const handleFilterApply = (overrides) => {
+    const merged = {
+      product_type: overrides.product_type !== undefined ? overrides.product_type : typeFilter,
+      use_type:     overrides.use_type     !== undefined ? overrides.use_type     : useTypeFilter,
+      use_duration: overrides.use_duration !== undefined ? overrides.use_duration : useDurFilter,
+    }
+    setSelectedBs(new Set()); setSelectedGroups(new Set())
+    fetchData(merged)
+  }
 
   const toggleBs    = sku => setSelectedBs(s => { const n=new Set(s); n.has(sku)?n.delete(sku):n.add(sku); return n })
   const toggleGroup = id  => setSelectedGroups(s => { const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n })
-
-  const uniqueTypes = campaignData?.meta?.unique_types || []
 
   return (
     <div className="animate-fade-in">
@@ -489,80 +615,83 @@ export default function Campaigns() {
             )}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {/* Type filter */}
-          {uniqueTypes.length > 0 && (
-            <select
-              value={typeFilter}
-              onChange={e => setTypeFilter(e.target.value)}
-              className="h-9 px-3 text-sm bg-gray-50 border border-gray-200 rounded-lg
-                         outline-none focus:border-[#0000E1] text-gray-600 cursor-pointer">
-              <option value="">Todos los tipos</option>
-              {uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-          )}
-          <button onClick={fetchData} disabled={loading}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold
-                       border-[1.5px] border-blue-600 text-blue-600
-                       hover:bg-blue-50 disabled:opacity-50 transition-all">
-            <IconRefresh spin={loading}/>
-            Actualizar
-          </button>
-        </div>
+        <button onClick={() => fetchData()} disabled={loading}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold
+                     border-[1.5px] border-blue-600 text-blue-600
+                     hover:bg-blue-50 disabled:opacity-50 transition-all">
+          <IconRefresh spin={loading}/>
+          Actualizar
+        </button>
       </div>
 
       {error && (
         <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
-          ⚠️ {error} <button onClick={fetchData} className="ml-3 underline">Reintentar</button>
+          ⚠️ {error} <button onClick={() => fetchData()} className="ml-3 underline">Reintentar</button>
         </div>
       )}
 
-      {/* ── Tabs ─────────────────────────────────────── */}
-      <div className="flex gap-1 mb-6 bg-gray-100/70 rounded-xl p-1 w-fit">
-        {TABS.map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all duration-150
-              ${activeTab === tab.id
-                ? 'bg-white text-[#0000E1] shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'}`}>
-            {tab.label}
-            {tab.id === 'gafas' && campaignData?.gafas?.has_data && (
-              <span className="ml-1.5 w-1.5 h-1.5 bg-[#0000E1] rounded-full inline-block"/>
-            )}
-          </button>
-        ))}
-      </div>
+      {/* ── Main layout: content left + filter sidebar right ── */}
+      <div className="flex gap-6 items-start">
 
-      {/* ── Tab content ──────────────────────────────── */}
-      {loading ? (
-        <Skeleton />
-      ) : (
-        <>
-          {activeTab === 'bestseller' && (
-            <BestSellerSection
-              data={campaignData?.bestseller}
-              selectedIds={selectedBs}
-              onToggle={toggleBs}
-            />
+        {/* ── Left: tabs + content ─────────────────────────── */}
+        <div className="flex-1 min-w-0">
+          {/* Tabs */}
+          <div className="flex gap-1 mb-6 bg-gray-100/70 rounded-xl p-1 w-fit">
+            {TABS.map(tab => (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all duration-150
+                  ${activeTab === tab.id
+                    ? 'bg-white text-[#0000E1] shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'}`}>
+                {tab.label}
+                {tab.id === 'gafas' && campaignData?.gafas?.has_data && (
+                  <span className="ml-1.5 w-1.5 h-1.5 bg-[#0000E1] rounded-full inline-block"/>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab content */}
+          {loading ? (
+            <Skeleton />
+          ) : (
+            <>
+              {activeTab === 'bestseller' && (
+                <BestSellerSection
+                  data={campaignData?.bestseller}
+                  selectedIds={selectedBs}
+                  onToggle={toggleBs}
+                />
+              )}
+              {activeTab === 'fabricantes' && (
+                <FabricantesSection
+                  data={campaignData?.fabricantes}
+                  selectedGroupIds={selectedGroups}
+                  onToggleGroup={toggleGroup}
+                  brandFilter={brandFilter}
+                  onBrandFilter={setBrandFilter}
+                />
+              )}
+              {activeTab === 'gafas' && (
+                <GafasSection
+                  data={campaignData?.gafas}
+                  selectedGroupIds={selectedGroups}
+                  onToggleGroup={toggleGroup}
+                />
+              )}
+            </>
           )}
-          {activeTab === 'fabricantes' && (
-            <FabricantesSection
-              data={campaignData?.fabricantes}
-              selectedGroupIds={selectedGroups}
-              onToggleGroup={toggleGroup}
-              brandFilter={brandFilter}
-              onBrandFilter={setBrandFilter}
-            />
-          )}
-          {activeTab === 'gafas' && (
-            <GafasSection
-              data={campaignData?.gafas}
-              selectedGroupIds={selectedGroups}
-              onToggleGroup={toggleGroup}
-            />
-          )}
-        </>
-      )}
+        </div>
+
+        {/* ── Right: filter sidebar ─────────────────────────── */}
+        <FilterSidebar
+          meta={campaignData?.meta}
+          typeFilter={typeFilter}       setTypeFilter={setTypeFilter}
+          useTypeFilter={useTypeFilter} setUseTypeFilter={setUseTypeFilter}
+          useDurFilter={useDurFilter}   setUseDurFilter={setUseDurFilter}
+          onApply={handleFilterApply}
+        />
+      </div>
 
       {/* ── Floating selection bar ────────────────────── */}
       {(selectedBs.size + selectedGroups.size) > 0 && (

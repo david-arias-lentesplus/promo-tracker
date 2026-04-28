@@ -1,8 +1,11 @@
 """
 📄 /api/raw_data.py  — Agente 2: Data Engineer
-GET /api/raw_data?page=1&limit=50&search=texto&status=Activo&country=CO&date_from=2024-01-01&date_to=2024-12-31
+GET /api/raw_data?page=1&limit=50&search=texto&status=Activo&country=CO
+                 &date_from=2024-01-01&date_to=2024-12-31
+                 &product_type=&use_type=&use_duration=
 Descarga el CSV maestro de Google Drive, lo une con las imágenes por SKU
-y retorna JSON paginado. Soporta filtros globales de país y rango de fechas.
+y retorna JSON paginado. Soporta filtros globales de país, rango de fechas,
+tipo de producto, tipo de uso y duración de uso.
 """
 import sys, os
 _API_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -13,7 +16,10 @@ import json, time
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from _auth         import validate_token, json_response
-from _data_service import fetch_csv_text, load_image_map, parse_csv, apply_filters, get_unique_countries, get_unique_types, strip_internal
+from _data_service import (fetch_csv_text, load_image_map, parse_csv,
+                           apply_filters, get_unique_countries, get_unique_types,
+                           get_unique_use_types, get_unique_use_durations,
+                           strip_internal)
 
 # ─── Handler ──────────────────────────────────────────────────
 class handler(BaseHTTPRequestHandler):
@@ -30,15 +36,17 @@ class handler(BaseHTTPRequestHandler):
         if not is_valid:
             return json_response(self, 401, {'status': 'error', 'message': msg})
 
-        qs        = parse_qs(urlparse(self.path).query)
-        page      = max(1, int(qs.get('page',      ['1'])[0]))
-        limit     = min(200, max(1, int(qs.get('limit', ['50'])[0])))
+        qs           = parse_qs(urlparse(self.path).query)
+        page         = max(1, int(qs.get('page',         ['1'])[0]))
+        limit        = min(200, max(1, int(qs.get('limit', ['50'])[0])))
         search       = qs.get('search',       [''])[0].strip()
         status       = qs.get('status',       [''])[0].strip()
         country      = qs.get('country',      [''])[0].strip()
         date_from    = qs.get('date_from',    [''])[0].strip()
         date_to      = qs.get('date_to',      [''])[0].strip()
         product_type = qs.get('product_type', [''])[0].strip()
+        use_type     = qs.get('use_type',     [''])[0].strip()
+        use_duration = qs.get('use_duration', [''])[0].strip()
 
         try:
             t0         = time.time()
@@ -46,13 +54,18 @@ class handler(BaseHTTPRequestHandler):
             raw_text   = fetch_csv_text()
             all_rows   = parse_csv(raw_text, image_map)
 
-            # Países disponibles (antes de filtrar)
+            # Valores únicos (calculados antes de filtrar)
             countries  = get_unique_countries(all_rows)
 
             # Aplicar todos los filtros
-            filtered   = apply_filters(all_rows, country=country, date_from=date_from,
-                                       date_to=date_to, search=search, status=status,
-                                       product_type=product_type)
+            filtered   = apply_filters(
+                all_rows,
+                country=country, date_from=date_from, date_to=date_to,
+                search=search, status=status,
+                product_type=product_type,
+                use_type=use_type,
+                use_duration=use_duration,
+            )
             total      = len(filtered)
             total_pgs  = max(1, -(-total // limit))
             page_rows  = filtered[(page - 1) * limit : page * limit]
@@ -62,15 +75,17 @@ class handler(BaseHTTPRequestHandler):
                 'status': 'ok',
                 'data':   [strip_internal(r) for r in page_rows],
                 'meta': {
-                    'total':          total,
-                    'total_all':      len(all_rows),
-                    'page':           page,
-                    'limit':          limit,
-                    'total_pages':    total_pgs,
-                    'images_loaded':  len(image_map) // 3,
-                    'elapsed_ms':     elapsed,
-                    'countries':      countries,
-                    'unique_types':   get_unique_types(all_rows),
+                    'total':           total,
+                    'total_all':       len(all_rows),
+                    'page':            page,
+                    'limit':           limit,
+                    'total_pages':     total_pgs,
+                    'images_loaded':   len(image_map) // 3,
+                    'elapsed_ms':      elapsed,
+                    'countries':       countries,
+                    'unique_types':    get_unique_types(all_rows),
+                    'unique_use_types':     get_unique_use_types(all_rows),
+                    'unique_use_durations': get_unique_use_durations(all_rows),
                 }
             })
 

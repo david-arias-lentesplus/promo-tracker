@@ -26,10 +26,13 @@ COUNTRY_NAMES = {
     'MX': 'México',
 }
 
-# Módulo-level cache de imágenes y tipos (persiste en el mismo proceso)
-_IMAGE_CACHE:  dict = {}
-_TYPE_CACHE:   dict = {}   # sku -> type
-_IMAGE_LOADED: bool = False
+# Módulo-level cache de imágenes, tipos y uso (persiste en el mismo proceso)
+_IMAGE_CACHE:    dict = {}
+_TYPE_CACHE:     dict = {}   # sku -> type
+_USE_TYPE_CACHE: dict = {}   # sku -> use_type
+_USE_DUR_CACHE:  dict = {}   # sku -> use_duration
+_IMAGE_LOADED:   bool = False
+_USE_LOADED:     bool = False
 
 # ─── Helpers internos ─────────────────────────────────────────
 
@@ -107,6 +110,35 @@ def get_type_map() -> dict:
     return _TYPE_CACHE
 
 
+# ─── Carga de use_type / use_duration ────────────────────────
+
+def load_use_data() -> None:
+    """Carga sku_use_data.csv en _USE_TYPE_CACHE y _USE_DUR_CACHE."""
+    global _USE_TYPE_CACHE, _USE_DUR_CACHE, _USE_LOADED
+    if _USE_LOADED:
+        return
+    path = os.path.join(_project_root(), 'data', 'sku_use_data.csv')
+    try:
+        with open(path, 'r', encoding='utf-8', errors='replace') as f:
+            for row in csv.DictReader(f):
+                sku = str(row.get('sku', '')).strip()
+                ut  = str(row.get('use_type',     '')).strip()
+                ud  = str(row.get('use_duration',  '')).strip()
+                if sku:
+                    for k in (sku, sku.upper(), sku.lower()):
+                        if ut: _USE_TYPE_CACHE[k] = ut
+                        if ud: _USE_DUR_CACHE[k]  = ud
+        _USE_LOADED = True
+    except Exception as e:
+        print(f"[_data_service] Error cargando use_data: {e}")
+
+
+def _get_use(sku: str, cache: dict) -> str:
+    if not sku:
+        return ''
+    return cache.get(sku) or cache.get(sku.upper()) or cache.get(sku.lower()) or ''
+
+
 # ─── Descarga CSV ─────────────────────────────────────────────
 
 def fetch_csv_text() -> str:
@@ -129,6 +161,10 @@ def fetch_csv_text() -> str:
 # ─── Parseo CSV → lista de registros ─────────────────────────
 
 def parse_csv(raw_text: str, image_map: dict) -> list:
+    # Asegurar que el cache de uso está cargado
+    if not _USE_LOADED:
+        load_use_data()
+
     reader  = csv.DictReader(io.StringIO(raw_text, newline=''))
     records = []
     for i, row in enumerate(reader):
@@ -192,6 +228,8 @@ def parse_csv(raw_text: str, image_map: dict) -> list:
             'tipo_promo':     str(row.get('Tipo promo pagina', '')).strip(),
             'url_image':      img,
             'product_type':   ptype,
+            'use_type':       _get_use(sku, _USE_TYPE_CACHE),
+            'use_duration':   _get_use(sku, _USE_DUR_CACHE),
         })
     return records
 
@@ -241,7 +279,17 @@ def apply_filters(
         pt = kwargs['product_type'].lower()
         out = [r for r in out if r.get('product_type','').lower() == pt]
 
-    # 5. Búsqueda
+    # 5. Tipo de uso
+    if kwargs.get('use_type', ''):
+        ut = kwargs['use_type'].lower()
+        out = [r for r in out if r.get('use_type','').lower() == ut]
+
+    # 6. Duración de uso
+    if kwargs.get('use_duration', ''):
+        ud = kwargs['use_duration'].lower()
+        out = [r for r in out if r.get('use_duration','').lower() == ud]
+
+    # 7. Búsqueda
     if search:
         q = search.lower()
         out = [r for r in out
@@ -251,6 +299,16 @@ def apply_filters(
                or q in r['nombre_campana'].lower()]
 
     return out
+
+
+def get_unique_use_types(records: list) -> list:
+    """Retorna lista ordenada de use_type únicos."""
+    return sorted({r.get('use_type','').strip() for r in records if r.get('use_type','').strip()})
+
+
+def get_unique_use_durations(records: list) -> list:
+    """Retorna lista ordenada de use_duration únicos."""
+    return sorted({r.get('use_duration','').strip() for r in records if r.get('use_duration','').strip()})
 
 
 def get_unique_types(records: list) -> list:

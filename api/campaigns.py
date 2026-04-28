@@ -21,7 +21,9 @@ from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from _auth         import validate_token, json_response
 from _data_service import (fetch_csv_text, load_image_map, parse_csv,
-                           apply_filters, get_unique_types, strip_internal)
+                           apply_filters, get_unique_types,
+                           get_unique_use_types, get_unique_use_durations,
+                           strip_internal)
 
 # ─── Email copy generator ─────────────────────────────────────
 
@@ -210,6 +212,8 @@ class handler(BaseHTTPRequestHandler):
         date_from    = qs.get('date_from',    [''])[0].strip()
         date_to      = qs.get('date_to',      [''])[0].strip()
         product_type = qs.get('product_type', [''])[0].strip()
+        use_type     = qs.get('use_type',     [''])[0].strip()
+        use_duration = qs.get('use_duration', [''])[0].strip()
 
         try:
             t0        = time.time()
@@ -217,7 +221,7 @@ class handler(BaseHTTPRequestHandler):
             raw_text  = fetch_csv_text()
             all_rows  = parse_csv(raw_text, image_map)
 
-            # Pool: activos en el rango de fechas + país + tipo opcional
+            # Pool: activos en el rango de fechas + país + filtros opcionales
             pool = apply_filters(
                 all_rows,
                 country=country,
@@ -225,12 +229,20 @@ class handler(BaseHTTPRequestHandler):
                 date_to=date_to,
                 status='Activo',
                 product_type=product_type,
+                use_type=use_type,
+                use_duration=use_duration,
             )
 
             # Construir los tres modelos
             bs_products   = build_bestseller(pool)
             fab_groups    = build_fabricantes(pool)
-            gafas_groups  = build_gafas(all_rows if not product_type else pool)
+            # Gafas: sin filtros de tipo para no limitar la sección dedicada
+            gafas_pool    = apply_filters(
+                all_rows,
+                country=country, date_from=date_from, date_to=date_to,
+                status='Activo',
+            )
+            gafas_groups  = build_gafas(gafas_pool)
 
             # Email copy
             bs_copy = gen_copy_bestseller(bs_products) if bs_products else {}
@@ -254,10 +266,12 @@ class handler(BaseHTTPRequestHandler):
                     'groups':   gafas_groups,
                 },
                 'meta': {
-                    'total_active': len(pool),
-                    'unique_types': get_unique_types(all_rows),
-                    'today':        datetime.now(timezone.utc).date().isoformat(),
-                    'elapsed_ms':   elapsed,
+                    'total_active':          len(pool),
+                    'unique_types':          get_unique_types(all_rows),
+                    'unique_use_types':      get_unique_use_types(all_rows),
+                    'unique_use_durations':  get_unique_use_durations(all_rows),
+                    'today':                 datetime.now(timezone.utc).date().isoformat(),
+                    'elapsed_ms':            elapsed,
                 }
             })
 

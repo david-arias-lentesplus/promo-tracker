@@ -17,7 +17,8 @@
       "config": {
         "includeFiles": [
           "api/_*.py",
-          "data/url_sku_images.csv"
+          "data/url_sku_images.csv",
+          "data/sku_use_data.csv"
         ]
       }
     },
@@ -27,7 +28,8 @@
       "config": {
         "includeFiles": [
           "api/_*.py",
-          "data/url_sku_images.csv"
+          "data/url_sku_images.csv",
+          "data/sku_use_data.csv"
         ]
       }
     },
@@ -37,7 +39,8 @@
       "config": {
         "includeFiles": [
           "api/_*.py",
-          "data/url_sku_images.csv"
+          "data/url_sku_images.csv",
+          "data/sku_use_data.csv"
         ]
       }
     },
@@ -47,7 +50,8 @@
       "config": {
         "includeFiles": [
           "api/_*.py",
-          "data/url_sku_images.csv"
+          "data/url_sku_images.csv",
+          "data/sku_use_data.csv"
         ]
       }
     },

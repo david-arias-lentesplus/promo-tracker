@@ -1,8 +1,8 @@
 /**
  * 📄 /src/pages/RawData.jsx
  * Agente 1 — Frontend (Skill B: Consumo de Datos)
- * Tabla con filtros globales (País + Fechas desde Topbar) + filtros locales (search + status)
- * Columnas: Imagen, SKU, Producto, Fabricante, BU, Estado, Campaña, Promo Marca, Desc., Tipo Promo, Vigencia
+ * Columnas: Imagen, SKU, Producto, Fabricante, BU, Tipo, Tipo de Uso, Duración, Estado,
+ *           Campaña, Promo Marca, Desc., Tipo Promo, Vigencia
  * Design System: LIVO
  */
 import React, { useState, useEffect, useCallback, useRef } from 'react'
@@ -121,7 +121,7 @@ function Pagination({ page, totalPages, onPage }) {
 function SkeletonRow() {
   return (
     <tr className="border-b border-gray-50">
-      {[10, 20, 44, 28, 14, 16, 24, 22, 16, 18, 16].map((w, i) => (
+      {[10, 20, 44, 28, 14, 16, 22, 20, 16, 24, 22, 16, 18, 16].map((w, i) => (
         <td key={i} className="px-4 py-4">
           <div className="h-4 bg-gray-100 rounded animate-pulse" style={{ width: `${w * 4}px` }} />
         </td>
@@ -136,33 +136,41 @@ const PAGE_SIZE = 50
 export default function RawData() {
   const { country, dateFrom, dateTo } = useFilters()
 
-  const [data,         setData]         = useState([])
-  const [meta,         setMeta]         = useState(null)
-  const [loading,      setLoading]      = useState(true)
-  const [error,        setError]        = useState('')
-  const [search,       setSearch]       = useState('')
-  const [statusFilter,  setStatusFilter]  = useState('')
-  const [typeFilter,    setTypeFilter]    = useState('')
-  const [availTypes,    setAvailTypes]    = useState([])
-  const [page,         setPage]         = useState(1)
-  const [lastUpdated,  setLastUpdated]  = useState(null)
+  const [data,           setData]           = useState([])
+  const [meta,           setMeta]           = useState(null)
+  const [loading,        setLoading]        = useState(true)
+  const [error,          setError]          = useState('')
+  const [search,         setSearch]         = useState('')
+  const [statusFilter,   setStatusFilter]   = useState('')
+  const [typeFilter,     setTypeFilter]     = useState('')
+  const [useTypeFilter,  setUseTypeFilter]  = useState('')
+  const [useDurFilter,   setUseDurFilter]   = useState('')
+  const [availTypes,     setAvailTypes]     = useState([])
+  const [availUseTypes,  setAvailUseTypes]  = useState([])
+  const [availUseDurs,   setAvailUseDurs]   = useState([])
+  const [page,           setPage]           = useState(1)
+  const [lastUpdated,    setLastUpdated]    = useState(null)
 
   const buildParams = useCallback((overrides = {}) => {
-    const p = overrides.page   ?? page
-    const s = overrides.search ?? search
-    const f = overrides.status ?? statusFilter
-    const pt = overrides.product_type ?? typeFilter
+    const p   = overrides.page         ?? page
+    const s   = overrides.search       ?? search
+    const f   = overrides.status       ?? statusFilter
+    const pt  = overrides.product_type ?? typeFilter
+    const ut  = overrides.use_type     ?? useTypeFilter
+    const ud  = overrides.use_duration ?? useDurFilter
     return new URLSearchParams({
       page:  p,
       limit: PAGE_SIZE,
-      ...(s        ? { search:       s        } : {}),
-      ...(f        ? { status:       f        } : {}),
-      ...(country  ? { country                } : {}),
-      ...(dateFrom ? { date_from:    dateFrom  } : {}),
-      ...(dateTo   ? { date_to:      dateTo    } : {}),
-      ...(pt       ? { product_type: pt        } : {}),
+      ...(s   ? { search:       s   } : {}),
+      ...(f   ? { status:       f   } : {}),
+      ...(country  ? { country              } : {}),
+      ...(dateFrom ? { date_from: dateFrom  } : {}),
+      ...(dateTo   ? { date_to:   dateTo    } : {}),
+      ...(pt  ? { product_type: pt } : {}),
+      ...(ut  ? { use_type:     ut } : {}),
+      ...(ud  ? { use_duration: ud } : {}),
     })
-  }, [page, search, statusFilter, country, dateFrom, dateTo])
+  }, [page, search, statusFilter, typeFilter, useTypeFilter, useDurFilter, country, dateFrom, dateTo])
 
   const fetchData = useCallback(async (overrides = {}) => {
     setLoading(true); setError('')
@@ -170,7 +178,9 @@ export default function RawData() {
       const res = await apiRequest(`/raw_data?${buildParams(overrides)}`)
       setData(res.data || [])
       setMeta(res.meta || null)
-      if (res.meta?.unique_types) setAvailTypes(res.meta.unique_types)
+      if (res.meta?.unique_types)          setAvailTypes(res.meta.unique_types)
+      if (res.meta?.unique_use_types)      setAvailUseTypes(res.meta.unique_use_types)
+      if (res.meta?.unique_use_durations)  setAvailUseDurs(res.meta.unique_use_durations)
       setLastUpdated(new Date())
     } catch (err) {
       setError(err.message || 'Error al cargar datos')
@@ -179,22 +189,20 @@ export default function RawData() {
     }
   }, [buildParams])
 
-  // Mount fetch
   useEffect(() => { fetchData() }, [])   // eslint-disable-line
 
-  // Re-fetch cuando cambian filtros globales
-  const prevGlobal = useRef({ country, dateFrom, dateTo, typeFilter })
+  const prevGlobal = useRef({ country, dateFrom, dateTo, typeFilter, useTypeFilter, useDurFilter })
   useEffect(() => {
     const prev = prevGlobal.current
     if (prev.country !== country || prev.dateFrom !== dateFrom || prev.dateTo !== dateTo
-        || prev.typeFilter !== typeFilter) {
-      prevGlobal.current = { country, dateFrom, dateTo, typeFilter }
+        || prev.typeFilter !== typeFilter || prev.useTypeFilter !== useTypeFilter
+        || prev.useDurFilter !== useDurFilter) {
+      prevGlobal.current = { country, dateFrom, dateTo, typeFilter, useTypeFilter, useDurFilter }
       setPage(1)
       fetchData({ page: 1 })
     }
-  }, [country, dateFrom, dateTo, typeFilter])  // eslint-disable-line
+  }, [country, dateFrom, dateTo, typeFilter, useTypeFilter, useDurFilter])  // eslint-disable-line
 
-  // Debounce search local
   const searchMounted = useRef(false)
   useEffect(() => {
     if (!searchMounted.current) { searchMounted.current = true; return }
@@ -202,22 +210,18 @@ export default function RawData() {
     return () => clearTimeout(t)
   }, [search])  // eslint-disable-line
 
-  const handleStatusChange = (val) => {
-    setStatusFilter(val); setPage(1)
-    fetchData({ page: 1, search, status: val })
-  }
-
-  const handleTypeChange = (val) => {
-    setTypeFilter(val); setPage(1)
-    fetchData({ page: 1, search, status: statusFilter, product_type: val })
-  }
-  const handlePage = (p) => { setPage(p); fetchData({ page: p }) }
+  const handleStatusChange  = val => { setStatusFilter(val);  setPage(1); fetchData({ page: 1, status: val }) }
+  const handleTypeChange    = val => { setTypeFilter(val);    setPage(1); fetchData({ page: 1, product_type: val }) }
+  const handleUseTypeChange = val => { setUseTypeFilter(val); setPage(1); fetchData({ page: 1, use_type: val }) }
+  const handleUseDurChange  = val => { setUseDurFilter(val);  setPage(1); fetchData({ page: 1, use_duration: val }) }
+  const handlePage          = p   => { setPage(p); fetchData({ page: p }) }
 
   const handleExport = () => {
-    const headers = ['SKU','Producto','Fabricante','BU','País','Estado','Fecha Inicio','Fecha Fin',
-                     'Campaña','Promo Marca','Descuento %','Tipo Promo','Imagen URL']
+    const headers = ['SKU','Producto','Fabricante','BU','País','Tipo','Tipo de Uso','Duración de Uso',
+                     'Estado','Fecha Inicio','Fecha Fin','Campaña','Promo Marca','Descuento %','Tipo Promo','Imagen URL']
     const rows = data.map(r => [
       r.sku, `"${r.product_name}"`, `"${r.fabricante}"`, r.business_unit, r.pais,
+      r.product_type, r.use_type, r.use_duration,
       r.status, r.date_start, r.date_end,
       `"${r.nombre_campana}"`, `"${r.promo_marca}"`, r.total_desc_pct, r.tipo_promo, r.url_image
     ].join(','))
@@ -248,14 +252,10 @@ export default function RawData() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => { setPage(1); fetchData({ page: 1 }) }}
-            disabled={loading}
+          <button onClick={() => { setPage(1); fetchData({ page: 1 }) }} disabled={loading}
             className="flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold
                        border-[1.5px] border-blue-600 text-blue-600
-                       hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed
-                       transition-all duration-150"
-          >
+                       hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-150">
             <IconRefresh spin={loading} />
             CSV Update
           </button>
@@ -266,7 +266,6 @@ export default function RawData() {
         </div>
       </div>
 
-      {/* ── Error banner ─────────────────────────────────────── */}
       {error && (
         <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
           ⚠️ {error}
@@ -277,52 +276,59 @@ export default function RawData() {
       {/* ── Table card ───────────────────────────────────────── */}
       <div className="card overflow-hidden">
 
-        {/* Filters row — locales */}
+        {/* Filters row */}
         <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3 flex-wrap">
           {/* Search */}
-          <div className="relative flex-1 min-w-[200px] max-w-xs">
+          <div className="relative flex-1 min-w-[180px] max-w-xs">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
               <IconSearch />
             </span>
-            <input
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
+            <input type="text" value={search} onChange={e => setSearch(e.target.value)}
               placeholder="SKU, producto, fabricante…"
               className="w-full h-9 pl-9 pr-3 text-sm bg-gray-50 border border-gray-200 rounded-lg
-                         placeholder-gray-400 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20
-                         transition-all duration-150"
-            />
+                         placeholder-gray-400 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition-all duration-150" />
           </div>
 
-          {/* Status filter */}
-          <select
-            value={statusFilter}
-            onChange={e => handleStatusChange(e.target.value)}
-            className="h-9 px-3 text-sm bg-gray-50 border border-gray-200 rounded-lg
-                       outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20
-                       text-gray-600 cursor-pointer"
-          >
+          {/* Status */}
+          <select value={statusFilter} onChange={e => handleStatusChange(e.target.value)}
+            className="h-9 px-3 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none
+                       focus:border-blue-600 text-gray-600 cursor-pointer">
             <option value="">Todos los estados</option>
             <option value="Activo">Activo</option>
             <option value="No Activo">No Activo</option>
           </select>
 
-          {/* Type filter */}
+          {/* Tipo de producto */}
           {availTypes.length > 0 && (
-            <select
-              value={typeFilter}
-              onChange={e => handleTypeChange(e.target.value)}
-              className="h-9 px-3 text-sm bg-gray-50 border border-gray-200 rounded-lg
-                         outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20
-                         text-gray-600 cursor-pointer"
-            >
+            <select value={typeFilter} onChange={e => handleTypeChange(e.target.value)}
+              className="h-9 px-3 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none
+                         focus:border-blue-600 text-gray-600 cursor-pointer">
               <option value="">Todos los tipos</option>
               {availTypes.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           )}
 
-          {/* Indicadores filtros globales activos */}
+          {/* Tipo de uso */}
+          {availUseTypes.length > 0 && (
+            <select value={useTypeFilter} onChange={e => handleUseTypeChange(e.target.value)}
+              className="h-9 px-3 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none
+                         focus:border-blue-600 text-gray-600 cursor-pointer">
+              <option value="">Tipo de uso</option>
+              {availUseTypes.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          )}
+
+          {/* Duración de uso */}
+          {availUseDurs.length > 0 && (
+            <select value={useDurFilter} onChange={e => handleUseDurChange(e.target.value)}
+              className="h-9 px-3 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none
+                         focus:border-blue-600 text-gray-600 cursor-pointer">
+              <option value="">Duración de uso</option>
+              {availUseDurs.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          )}
+
+          {/* Active global filter pills */}
           {(country || dateFrom || dateTo) && (
             <div className="flex items-center gap-1.5 flex-wrap">
               {country && (
@@ -338,7 +344,6 @@ export default function RawData() {
             </div>
           )}
 
-          {/* Meta */}
           {meta && !loading && (
             <span className="ml-auto text-xs text-gray-400 whitespace-nowrap">
               {meta.total.toLocaleString()} resultados · {meta.elapsed_ms}ms
@@ -348,10 +353,11 @@ export default function RawData() {
 
         {/* Table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[1100px]">
+          <table className="w-full text-sm min-w-[1400px]">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/70">
-                {['Imagen','SKU','Producto','Fabricante','BU','Tipo','Estado','Campaña','Promo Marca','Desc.','Tipo Promo','Vigencia'].map(col => (
+                {['Imagen','SKU','Producto','Fabricante','BU','Tipo','Tipo de Uso','Duración',
+                  'Estado','Campaña','Promo Marca','Desc.','Tipo Promo','Vigencia'].map(col => (
                   <th key={col} className="px-4 py-3 text-left text-xs font-semibold text-gray-400 tracking-wider uppercase whitespace-nowrap first:pl-5">
                     {col}
                   </th>
@@ -363,7 +369,7 @@ export default function RawData() {
                 Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} />)
               ) : data.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="px-5 py-16 text-center text-gray-400 text-sm">
+                  <td colSpan={14} className="px-5 py-16 text-center text-gray-400 text-sm">
                     {search ? `Sin resultados para "${search}"` : 'No hay datos disponibles'}
                   </td>
                 </tr>
@@ -374,31 +380,26 @@ export default function RawData() {
                       idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/20'
                     }`}>
 
-                    {/* Imagen */}
                     <td className="pl-5 pr-2 py-3">
                       <ProductThumb url={row.url_image} name={row.product_name} />
                     </td>
 
-                    {/* SKU */}
                     <td className="px-4 py-3">
                       <span className="font-bold text-xs text-gray-800 tracking-wide font-mono whitespace-nowrap">
                         {row.sku || '—'}
                       </span>
                     </td>
 
-                    {/* Producto */}
-                    <td className="px-4 py-3 max-w-[200px]">
+                    <td className="px-4 py-3 max-w-[180px]">
                       <p className="text-gray-700 font-medium text-xs leading-snug line-clamp-2">
                         {row.product_name || '—'}
                       </p>
                     </td>
 
-                    {/* Fabricante */}
-                    <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap max-w-[130px]">
+                    <td className="px-4 py-3 text-gray-500 text-xs max-w-[120px]">
                       <span className="truncate block">{row.fabricante || '—'}</span>
                     </td>
 
-                    {/* BU */}
                     <td className="px-4 py-3">
                       {row.business_unit
                         ? <span className="badge-info">{row.business_unit}</span>
@@ -408,36 +409,44 @@ export default function RawData() {
                     {/* Tipo de producto */}
                     <td className="px-4 py-3">
                       {row.product_type
-                        ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-100 whitespace-nowrap">{row.product_type}</span>
+                        ? <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-100 whitespace-nowrap">{row.product_type}</span>
                         : <span className="text-gray-400 text-xs">—</span>}
                     </td>
 
-                    {/* Estado */}
+                    {/* Tipo de uso */}
+                    <td className="px-4 py-3">
+                      {row.use_type
+                        ? <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-teal-50 text-teal-700 border border-teal-100 whitespace-nowrap">{row.use_type}</span>
+                        : <span className="text-gray-400 text-xs">—</span>}
+                    </td>
+
+                    {/* Duración de uso */}
+                    <td className="px-4 py-3">
+                      {row.use_duration
+                        ? <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-orange-50 text-orange-700 border border-orange-100 whitespace-nowrap">{row.use_duration}</span>
+                        : <span className="text-gray-400 text-xs">—</span>}
+                    </td>
+
                     <td className="px-4 py-3">
                       <StatusBadge status={row.status} />
                     </td>
 
-                    {/* Campaña */}
-                    <td className="px-4 py-3 text-gray-500 text-xs max-w-[140px]">
+                    <td className="px-4 py-3 text-gray-500 text-xs max-w-[130px]">
                       <span className="truncate block">{row.nombre_campana || row.tipo_campana || '—'}</span>
                     </td>
 
-                    {/* Promo Marca */}
-                    <td className="px-4 py-3 text-gray-600 text-xs max-w-[140px]">
+                    <td className="px-4 py-3 text-gray-600 text-xs max-w-[130px]">
                       <span className="truncate block">{row.promo_marca || '—'}</span>
                     </td>
 
-                    {/* Descuento */}
                     <td className="px-4 py-3">
                       <DiscountBadge pct={row.total_desc_pct} />
                     </td>
 
-                    {/* Tipo Promo */}
                     <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
                       {row.tipo_promo || '—'}
                     </td>
 
-                    {/* Vigencia */}
                     <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
                       {row.date_start && row.date_end ? (
                         <div className="space-y-0.5">
@@ -453,7 +462,7 @@ export default function RawData() {
           </table>
         </div>
 
-        {/* Pagination footer */}
+        {/* Pagination */}
         <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-between flex-wrap gap-3">
           <p className="text-xs text-gray-500">
             {loading ? 'Cargando…' : (
@@ -461,12 +470,10 @@ export default function RawData() {
                 Mostrando{' '}
                 <span className="font-semibold text-gray-700">
                   {meta ? ((page - 1) * PAGE_SIZE + 1) : 0}
-                </span>
-                {' '}–{' '}
+                </span>{' '}–{' '}
                 <span className="font-semibold text-gray-700">
                   {meta ? Math.min(page * PAGE_SIZE, meta.total) : 0}
-                </span>
-                {' '}de{' '}
+                </span>{' '}de{' '}
                 <span className="font-semibold text-gray-700">
                   {meta?.total?.toLocaleString() ?? 0}
                 </span>{' '}entradas
