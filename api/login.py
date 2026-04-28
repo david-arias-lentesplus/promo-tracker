@@ -45,6 +45,7 @@ class handler(BaseHTTPRequestHandler):
             now = datetime.now(timezone.utc)
             payload = {
                 'sub':          user['username'],
+                'user_id':      user.get('id', ''),
                 'display_name': user.get('display_name', username),
                 'role':         user.get('role', 'viewer'),
                 'iat':          int(now.timestamp()),

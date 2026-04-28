@@ -56,6 +56,37 @@
       }
     },
     {
+      "src": "api/users.py",
+      "use": "@vercel/python",
+      "config": {
+        "includeFiles": [
+          "api/_*.py",
+          "data/users.json"
+        ]
+      }
+    },
+    {
+      "src": "api/me.py",
+      "use": "@vercel/python",
+      "config": {
+        "includeFiles": [
+          "api/_*.py",
+          "data/users.json"
+        ]
+      }
+    },
+    {
+      "src": "api/notifications.py",
+      "use": "@vercel/python",
+      "config": {
+        "includeFiles": [
+          "api/_*.py",
+          "data/url_sku_images.csv",
+          "data/sku_use_data.csv"
+        ]
+      }
+    },
+    {
       "src": "package.json",
       "use": "@vercel/static-build",
       "config": {

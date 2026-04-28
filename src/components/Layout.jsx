@@ -61,6 +61,13 @@ const IconUser = ({ size = 20 }) => (
     <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
   </svg>
 )
+const IconSettings = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="3"/>
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+  </svg>
+)
 const IconLogout = ({ size = 18 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -96,13 +103,14 @@ const COUNTRY_BTNS = [
 ]
 
 // ─── Nav items ───────────────────────────────────────────────
-const NAV_ITEMS = [
+const BASE_NAV = [
   { label: 'Dashboard', to: '/dashboard', icon: IconDashboard },
   { label: 'HS Info',   to: '/hs-info',   icon: IconInfo },
   { label: 'Campañas',  to: '/campaigns', icon: IconMegaphone },
   { label: 'Analytics', to: '/analytics', icon: IconBarChart },
   { label: 'Raw Data',  to: '/raw-data',  icon: IconTable },
 ]
+const ADMIN_NAV = { label: 'Settings', to: '/settings', icon: IconSettings }
 
 // ─── Sidebar ─────────────────────────────────────────────────
 function Sidebar() {
@@ -118,13 +126,17 @@ function Sidebar() {
       </div>
 
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-        {NAV_ITEMS.map(({ label, to, icon: Icon }) => (
-          <NavLink key={to} to={to}
-            className={({ isActive }) => isActive ? 'nav-item-active' : 'nav-item'}>
-            <Icon size={17} />
-            <span>{label}</span>
-          </NavLink>
-        ))}
+        {(() => {
+          const role = getCurrentUser()?.role
+          const items = role === 'admin' ? [...BASE_NAV, ADMIN_NAV] : BASE_NAV
+          return items.map(({ label, to, icon: Icon }) => (
+            <NavLink key={to} to={to}
+              className={({ isActive }) => isActive ? 'nav-item-active' : 'nav-item'}>
+              <Icon size={17} />
+              <span>{label}</span>
+            </NavLink>
+          ))
+        })()}
       </nav>
 
       <div className="px-4 pb-4">
@@ -153,9 +165,39 @@ function Sidebar() {
   )
 }
 
+
+// ─── Notification badge count ─────────────────────────────────
+function useUnreadCount() {
+  const [count, setCount] = React.useState(() => {
+    try {
+      const ids  = JSON.parse(localStorage.getItem('notif_read_ids') || '[]')
+      const all  = JSON.parse(localStorage.getItem('notif_all_ids')  || '[]')
+      return all.filter(id => !ids.includes(id)).length
+    } catch { return 0 }
+  })
+  React.useEffect(() => {
+    const update = () => {
+      try {
+        const ids = JSON.parse(localStorage.getItem('notif_read_ids') || '[]')
+        const all = JSON.parse(localStorage.getItem('notif_all_ids')  || '[]')
+        setCount(all.filter(id => !ids.includes(id)).length)
+      } catch { setCount(0) }
+    }
+    window.addEventListener('notif_read_changed',  update)
+    window.addEventListener('notif_items_changed', update)
+    return () => {
+      window.removeEventListener('notif_read_changed',  update)
+      window.removeEventListener('notif_items_changed', update)
+    }
+  }, [])
+  return count
+}
+
 // ─── Topbar ──────────────────────────────────────────────────
 function Topbar({ onLogout }) {
   const { country, setCountry, dateFrom, setDateFrom, dateTo, setDateTo } = useFilters()
+  const navigate    = useNavigate()
+  const unreadCount = useUnreadCount()
 
   function setToday() {
     const today = new Date().toISOString().split('T')[0]
@@ -251,14 +293,26 @@ function Topbar({ onLogout }) {
 
       {/* Right actions */}
       <div className="ml-auto flex items-center gap-3 shrink-0">
-        <button className="w-9 h-9 rounded-full hover:bg-gray-100 flex items-center justify-center
-                           text-gray-500 hover:text-gray-700 transition-colors relative">
+        <button
+          onClick={() => navigate('/notifications')}
+          className="w-9 h-9 rounded-full hover:bg-gray-100 flex items-center justify-center
+                     text-gray-500 hover:text-gray-700 transition-colors relative"
+          title="Notificaciones">
           <IconBell size={18} />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#0000E1] rounded-full" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 rounded-full
+                             bg-[#0000E1] text-white text-[9px] font-bold flex items-center
+                             justify-center px-0.5 leading-none shadow-sm">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
         </button>
 
-        <button className="w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center
-                           justify-center text-gray-600 transition-colors">
+        <button
+          onClick={() => navigate('/profile')}
+          className="w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center
+                     justify-center text-gray-600 transition-colors"
+          title="Mi perfil">
           <IconUser size={17} />
         </button>
 

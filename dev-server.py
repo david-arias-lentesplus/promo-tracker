@@ -78,6 +78,8 @@ class DevRouter(BaseHTTPRequestHandler):
 
     def do_GET(self):     self._route()
     def do_POST(self):    self._route()
+    def do_PUT(self):     self._route()
+    def do_DELETE(self):  self._route()
     def do_OPTIONS(self): self._route()
 
     def log_message(self, fmt, *args):
