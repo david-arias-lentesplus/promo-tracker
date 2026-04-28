@@ -2,19 +2,22 @@
  * 📄 /src/pages/Analytics.jsx
  * Auditoría de promociones — lista paginada + verificación por scraping
  */
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { apiRequest } from '@utils/api'
 import { useFilters }  from '@context/FiltersContext'
 
 // ─── Icons ─────────────────────────────────────────────────────────
-const IconSearch   = ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-const IconCheck    = ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-const IconX        = ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-const IconAlert    = ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-const IconLoader   = ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-const IconPlay     = ({ s=13 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-const IconExternal = ({ s=11 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-const IconChevron  = ({ s=14, dir='left' }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points={dir==='left'?'15 18 9 12 15 6':'9 18 15 12 9 6'}/></svg>
+const IconSearch      = ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+const IconCheck       = ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+const IconX           = ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+const IconAlert       = ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+const IconLoader      = ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+const IconPlay        = ({ s=13 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+const IconExternal    = ({ s=11 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+const IconChevron     = ({ s=14, dir='left' }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points={dir==='left'?'15 18 9 12 15 6':'9 18 15 12 9 6'}/></svg>
+const IconCheckSquare = ({ s=15 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+const IconSquare      = ({ s=15 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>
+const IconMinus       = ({ s=15 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
 
 // ─── Helpers ────────────────────────────────────────────────────────
 function fmtDate(iso) {
@@ -42,7 +45,7 @@ class ErrorBoundary extends React.Component {
     if (this.state.hasError) {
       return (
         <tr>
-          <td colSpan={9} className="px-4 pb-3 pt-0">
+          <td colSpan={10} className="px-4 pb-3 pt-0">
             <div className="rounded-xl border border-red-200 bg-red-50 p-3">
               <p className="text-xs font-bold text-red-700 mb-1">Error al mostrar el resultado</p>
               <p className="text-[11px] text-red-600 font-mono">
@@ -122,7 +125,7 @@ function VerifBadge({ state, onClick }) {
   return null
 }
 
-// ─── Debug Panel ─────────────────────────────────────────────────────
+// ─── Debug Panel (solo se muestra en warning/error) ──────────────────
 function DebugPanel({ debug }) {
   const [open, setOpen] = useState(false)
   if (!debug) return null
@@ -154,8 +157,6 @@ function DebugPanel({ debug }) {
 
       {open && (
         <div className="p-3 space-y-3 bg-white">
-
-          {/* Steps */}
           {steps.length > 0 && (
             <div>
               <p className="font-semibold text-gray-700 mb-1">Pasos de ejecución:</p>
@@ -169,8 +170,6 @@ function DebugPanel({ debug }) {
               </ol>
             </div>
           )}
-
-          {/* Page URL */}
           {pageUrl && (
             <p className="text-gray-600">
               <span className="font-semibold">URL final: </span>
@@ -178,16 +177,12 @@ function DebugPanel({ debug }) {
                 className="text-[#0000E1] underline break-all">{pageUrl}</a>
             </p>
           )}
-
-          {/* Selector hit */}
           {selectorHit && (
             <p className="text-gray-600">
               <span className="font-semibold">Selector precio: </span>
               <code className="bg-gray-100 px-1 rounded">{selectorHit}</code>
             </p>
           )}
-
-          {/* Prices */}
           {allPrices.length > 0 && (
             <div>
               <p className="font-semibold text-gray-700 mb-1">Precios extraídos:</p>
@@ -200,29 +195,19 @@ function DebugPanel({ debug }) {
               </div>
             </div>
           )}
-
-          {/* Error */}
-          {errorMsg && (
-            <p className="text-red-600 font-semibold">Error: {errorMsg}</p>
-          )}
-
-          {/* Cart raw */}
+          {errorMsg && <p className="text-red-600 font-semibold">Error: {errorMsg}</p>}
           {cartRaw && (
             <div>
               <p className="font-semibold text-gray-700 mb-1">Resumen del carrito:</p>
               <pre className="bg-gray-100 rounded p-2 whitespace-pre-wrap max-h-28 overflow-y-auto text-[10px]">{cartRaw}</pre>
             </div>
           )}
-
-          {/* Body snippet */}
           {bodySnippet && !cartRaw && (
             <div>
               <p className="font-semibold text-gray-700 mb-1">Texto de la página:</p>
               <pre className="bg-gray-100 rounded p-2 whitespace-pre-wrap max-h-28 overflow-y-auto text-[10px]">{bodySnippet}</pre>
             </div>
           )}
-
-          {/* Step screenshots */}
           {ssEntries.length > 0 && (
             <div>
               <p className="font-semibold text-gray-700 mb-2">Screenshots ({ssEntries.length}):</p>
@@ -230,20 +215,15 @@ function DebugPanel({ debug }) {
                 {ssEntries.map(([label, b64]) => (
                   <div key={label}>
                     <p className="text-gray-500 mb-1 font-mono">{label}</p>
-                    <img
-                      src={`data:image/png;base64,${b64}`}
-                      alt={label}
+                    <img src={`data:image/png;base64,${b64}`} alt={label}
                       className="max-w-full rounded border border-gray-200 cursor-pointer"
                       onClick={() => window.open(`data:image/png;base64,${b64}`, '_blank')}
-                      title="Click para abrir en nueva pestaña"
-                    />
+                      title="Click para abrir en nueva pestaña" />
                   </div>
                 ))}
               </div>
             </div>
           )}
-
-          {/* Legacy single screenshot */}
           {legacyB64 && ssEntries.length === 0 && (
             <div>
               <p className="font-semibold text-gray-700 mb-1">Screenshot:</p>
@@ -260,6 +240,8 @@ function DebugPanel({ debug }) {
 // ─── Result Panel ────────────────────────────────────────────────────
 function ResultPanel({ state, onClose }) {
   if (!state || state.loading) return null
+
+  const isOk = state.status === 'ok'
 
   const colors = {
     ok:      'bg-emerald-50 border-emerald-200',
@@ -280,7 +262,7 @@ function ResultPanel({ state, onClose }) {
 
   return (
     <tr>
-      <td colSpan={9} className="px-4 pb-3 pt-0">
+      <td colSpan={10} className="px-4 pb-3 pt-0">
         <div className={`rounded-xl border p-3 ${cls}`}>
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
@@ -301,7 +283,6 @@ function ResultPanel({ state, onClose }) {
               {/* Tier Price details */}
               {(state.tipo === 'tier_price' || state.tipo === 'Tier Price') && (
                 <div className="mt-1 space-y-1.5">
-                  {/* Campos de fórmula y cantidad */}
                   <div className="flex flex-wrap gap-3 text-[11px] text-gray-500">
                     {det.fields_filled && Object.keys(det.fields_filled).length > 0 && (
                       <span>Campos: {Object.entries(det.fields_filled).map(([k,v]) => `${k}: ${v}`).join(' | ')}</span>
@@ -313,19 +294,14 @@ function ResultPanel({ state, onClose }) {
                     )}
                   </div>
 
-                  {/* Tabla de verificación de precios */}
                   {det.subtotal && (
                     <div className="bg-white/70 rounded-lg border border-gray-200 px-3 py-2 text-[11px] inline-flex flex-col gap-1 min-w-[260px] mt-1">
-
-                      {/* Subtotal del ítem */}
                       <div className="flex justify-between gap-8">
                         <span className="text-gray-500">Precio del ítem (subtotal)</span>
                         <span className="font-semibold text-gray-700 tabular-nums">
                           {Number(det.subtotal).toLocaleString()}
                         </span>
                       </div>
-
-                      {/* Descuento esperado (CSV) */}
                       <div className="flex justify-between gap-8 text-blue-700">
                         <span>Descuento CSV ({det.discount_csv}%)</span>
                         <span className="font-semibold tabular-nums">
@@ -334,10 +310,7 @@ function ResultPanel({ state, onClose }) {
                               : Number(det.subtotal * det.discount_csv / 100).toLocaleString()}
                         </span>
                       </div>
-
                       <div className="border-t border-gray-200 mt-0.5 pt-0.5"/>
-
-                      {/* Total esperado vs total real */}
                       <div className="flex justify-between gap-8">
                         <span className="text-gray-500">Total esperado</span>
                         <span className="font-semibold tabular-nums text-gray-700">
@@ -346,7 +319,6 @@ function ResultPanel({ state, onClose }) {
                             : Number(det.subtotal * (1 - det.discount_csv / 100)).toLocaleString()}
                         </span>
                       </div>
-
                       <div className="flex justify-between gap-8">
                         <span className="text-gray-500">Total real (resumen carrito)</span>
                         <span className={`font-bold tabular-nums ${
@@ -356,8 +328,6 @@ function ResultPanel({ state, onClose }) {
                           {det.total != null ? Number(det.total).toLocaleString() : '—'}
                         </span>
                       </div>
-
-                      {/* Diferencia */}
                       {det.diff_pp != null && (
                         <div className={`flex justify-between gap-8 text-[10px] pt-0.5 ${
                           det.diff_pp <= 2 ? 'text-emerald-600' : 'text-amber-600'
@@ -375,8 +345,8 @@ function ResultPanel({ state, onClose }) {
                 </div>
               )}
 
-              {/* Steps summary (always show if present) */}
-              {Array.isArray(det.steps) && det.steps.length > 0 && (
+              {/* Steps + Debug solo cuando NO es OK */}
+              {!isOk && Array.isArray(det.steps) && det.steps.length > 0 && (
                 <div className="mt-2 space-y-0.5">
                   {det.steps.map((s, i) => (
                     <p key={i} className={`text-[10px] ${s.ok === false ? 'text-red-500' : 'text-gray-500'}`}>
@@ -390,8 +360,8 @@ function ResultPanel({ state, onClose }) {
                 <p className="text-[10px] text-gray-400 mt-1">{state.elapsed_ms}ms</p>
               )}
 
-              {/* Debug panel */}
-              {det.debug && <DebugPanel debug={det.debug} />}
+              {/* Debug panel solo en warning/error */}
+              {!isOk && det.debug && <DebugPanel debug={det.debug} />}
             </div>
 
             <button onClick={onClose}
@@ -472,13 +442,17 @@ function FilterBar({ meta, filters, onChange }) {
 export default function Analytics() {
   const { country, dateFrom, dateTo } = useFilters()
 
-  const [data,       setData]       = useState([])
-  const [meta,       setMeta]       = useState({})
-  const [loading,    setLoading]    = useState(true)
-  const [error,      setError]      = useState('')
-  const [filters,    setFilters]    = useState({ page: 1, limit: 50 })
-  const [verifStates, setVerifStates] = useState({})
-  const [openPanel,  setOpenPanel]  = useState(null)
+  const [data,         setData]         = useState([])
+  const [meta,         setMeta]         = useState({})
+  const [loading,      setLoading]      = useState(true)
+  const [error,        setError]        = useState('')
+  const [filters,      setFilters]      = useState({ page: 1, limit: 50 })
+  const [verifStates,  setVerifStates]  = useState({})
+  const [openPanel,    setOpenPanel]    = useState(null)
+  const [selectedKeys, setSelectedKeys] = useState(new Set())
+  const [bulkRunning,  setBulkRunning]  = useState(false)
+  const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 })
+  const bulkAbort = useRef(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -508,11 +482,15 @@ export default function Analytics() {
 
   useEffect(() => { load() }, [load])
 
+  // Reset selection when data changes
+  useEffect(() => { setSelectedKeys(new Set()) }, [data])
+
   function rowKey(row) {
     return `${row.sku || row.product_name}_${row.date_end}_${row.pais}`
   }
 
-  async function handleVerify(row) {
+  // ─── Verifica un solo producto ────────────────────────────────────
+  async function verifySingle(row) {
     const key = rowKey(row)
     setOpenPanel(key)
 
@@ -522,7 +500,7 @@ export default function Analytics() {
         message: 'Este producto no tiene URL asociada.',
         details: {},
       }}))
-      return
+      return { status: 'error' }
     }
 
     setVerifStates(s => ({ ...s, [key]: { loading: true } }))
@@ -539,11 +517,78 @@ export default function Analytics() {
         }),
       })
       setVerifStates(s => ({ ...s, [key]: res }))
+      return res
     } catch (err) {
-      setVerifStates(s => ({ ...s, [key]: {
-        status: 'error', message: err.message, details: {},
-      }}))
+      const errState = { status: 'error', message: err.message, details: {} }
+      setVerifStates(s => ({ ...s, [key]: errState }))
+      return errState
     }
+  }
+
+  function handleVerify(row) {
+    const key = rowKey(row)
+    const verif = verifStates[key]
+    if (!verif || verif.loading) {
+      verifySingle(row)
+    } else {
+      setOpenPanel(openPanel === key ? null : key)
+    }
+  }
+
+  // ─── Verificación masiva ──────────────────────────────────────────
+  async function handleBulkVerify() {
+    const rows = selectedKeys.size > 0
+      ? data.filter(r => selectedKeys.has(rowKey(r)))
+      : data.filter(r => r.product_url)  // "todos" = con URL
+
+    if (rows.length === 0) return
+
+    setBulkRunning(true)
+    bulkAbort.current = false
+    setBulkProgress({ done: 0, total: rows.length })
+    setOpenPanel(null)
+
+    // Marcar todos como loading
+    const loadingStates = {}
+    rows.forEach(r => { loadingStates[rowKey(r)] = { loading: true } })
+    setVerifStates(s => ({ ...s, ...loadingStates }))
+
+    for (let i = 0; i < rows.length; i++) {
+      if (bulkAbort.current) break
+      const row = rows[i]
+      await verifySingle(row)
+      setBulkProgress({ done: i + 1, total: rows.length })
+    }
+
+    setBulkRunning(false)
+  }
+
+  function handleBulkStop() {
+    bulkAbort.current = true
+    setBulkRunning(false)
+  }
+
+  // ─── Selección ───────────────────────────────────────────────────
+  const scrapableRows = data.filter(r => r.product_url)
+  const allSelected   = scrapableRows.length > 0 && scrapableRows.every(r => selectedKeys.has(rowKey(r)))
+  const someSelected  = scrapableRows.some(r => selectedKeys.has(rowKey(r)))
+
+  function toggleSelectAll() {
+    if (allSelected) {
+      setSelectedKeys(new Set())
+    } else {
+      setSelectedKeys(new Set(scrapableRows.map(rowKey)))
+    }
+  }
+
+  function toggleRow(row) {
+    const key = rowKey(row)
+    setSelectedKeys(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
   }
 
   const totalPages = meta.total_pages || 1
@@ -553,6 +598,8 @@ export default function Analytics() {
   const verifOk   = verifList.filter(v => v.status === 'ok').length
   const verifWarn = verifList.filter(v => v.status === 'warning').length
   const verifErr  = verifList.filter(v => v.status === 'error').length
+
+  const nSelected = selectedKeys.size
 
   return (
     <div>
@@ -565,13 +612,11 @@ export default function Analytics() {
           </p>
         </div>
 
-        {verifList.length > 0 && (
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {verifOk   > 0 && <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-700 text-xs font-bold"><IconCheck s={12}/>{verifOk} OK</span>}
-            {verifWarn > 0 && <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-100 text-amber-700 text-xs font-bold"><IconAlert s={12}/>{verifWarn}</span>}
-            {verifErr  > 0 && <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-100 text-red-700 text-xs font-bold"><IconX s={12}/>{verifErr} Error</span>}
-          </div>
-        )}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {verifOk   > 0 && <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-700 text-xs font-bold"><IconCheck s={12}/>{verifOk} OK</span>}
+          {verifWarn > 0 && <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-100 text-amber-700 text-xs font-bold"><IconAlert s={12}/>{verifWarn}</span>}
+          {verifErr  > 0 && <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-100 text-red-700 text-xs font-bold"><IconX s={12}/>{verifErr} Error</span>}
+        </div>
       </div>
 
       {/* Filters */}
@@ -579,12 +624,78 @@ export default function Analytics() {
         <FilterBar meta={meta} filters={filters} onChange={setFilters} />
       </div>
 
+      {/* Bulk action bar */}
+      <div className={`mb-3 rounded-xl border px-4 py-2.5 flex items-center justify-between gap-3 transition-all
+        ${nSelected > 0 ? 'bg-[#0000E1] border-[#0000E1] shadow-md' : 'bg-white border-gray-100 shadow-sm'}`}>
+
+        <div className="flex items-center gap-3">
+          {/* Select-all checkbox */}
+          <button
+            onClick={toggleSelectAll}
+            className={`flex items-center justify-center w-5 h-5 rounded transition-colors
+              ${nSelected > 0 ? 'text-white' : 'text-gray-400 hover:text-gray-600'}`}
+            title={allSelected ? 'Deseleccionar todo' : 'Seleccionar todos con URL'}>
+            {allSelected
+              ? <IconCheckSquare s={16} />
+              : someSelected
+                ? <IconMinus s={16} />
+                : <IconSquare s={16} />}
+          </button>
+
+          {nSelected > 0
+            ? <span className="text-sm font-bold text-white">{nSelected} producto{nSelected > 1 ? 's' : ''} seleccionado{nSelected > 1 ? 's' : ''}</span>
+            : <span className="text-xs text-gray-500">Selecciona productos para verificar en bloque</span>
+          }
+
+          {/* Progreso bulk */}
+          {bulkRunning && (
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-white/90">
+              <IconLoader s={12} />
+              {bulkProgress.done}/{bulkProgress.total} verificados…
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          {nSelected > 0 && !bulkRunning && (
+            <button onClick={() => setSelectedKeys(new Set())}
+              className="text-xs font-semibold text-white/80 hover:text-white transition-colors px-2">
+              Limpiar selección
+            </button>
+          )}
+
+          {bulkRunning
+            ? <button onClick={handleBulkStop}
+                className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-white/20 hover:bg-white/30
+                           text-xs font-bold text-white transition-colors border border-white/30">
+                <IconX s={11}/> Detener
+              </button>
+            : <button
+                onClick={handleBulkVerify}
+                disabled={loading}
+                className={`flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-bold transition-colors
+                  ${nSelected > 0
+                    ? 'bg-white text-[#0000E1] hover:bg-white/90'
+                    : 'bg-[#0000E1] border border-[#0000E1] text-white hover:bg-[#0000CC]'}`}>
+                <IconPlay s={11}/>
+                {nSelected > 0
+                  ? `Verificar ${nSelected} seleccionados`
+                  : `Verificar todos (${scrapableRows.length})`}
+              </button>
+          }
+        </div>
+      </div>
+
       {/* Table */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px]">
+          <table className="w-full min-w-[960px]">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">
+                {/* Checkbox header */}
+                <th className="pl-4 pr-2 py-3 w-8">
+                  <span className="sr-only">Seleccionar</span>
+                </th>
                 {['Producto','SKU','Fabricante','Estado','Promo Marca','Tipo Promo','Descuento','Vigencia','Verificación'].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">
                     {h}
@@ -594,26 +705,40 @@ export default function Analytics() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={9} className="text-center py-20 text-sm text-gray-400">
+                <tr><td colSpan={10} className="text-center py-20 text-sm text-gray-400">
                   <div className="flex items-center justify-center gap-2">
                     <div className="w-5 h-5 border-2 border-[#0000E1] border-t-transparent rounded-full animate-spin"/>
                     Cargando productos…
                   </div>
                 </td></tr>
               ) : error ? (
-                <tr><td colSpan={9} className="text-center py-12 text-sm text-red-500">{error}</td></tr>
+                <tr><td colSpan={10} className="text-center py-12 text-sm text-red-500">{error}</td></tr>
               ) : data.length === 0 ? (
-                <tr><td colSpan={9} className="text-center py-16 text-sm text-gray-400">
+                <tr><td colSpan={10} className="text-center py-16 text-sm text-gray-400">
                   No hay productos para los filtros seleccionados.
                 </td></tr>
               ) : data.map((row, i) => {
-                const key    = rowKey(row)
-                const verif  = verifStates[key]
-                const isOpen = openPanel === key
+                const key     = rowKey(row)
+                const verif   = verifStates[key]
+                const isOpen  = openPanel === key
+                const checked = selectedKeys.has(key)
+                const hasUrl  = !!row.product_url
 
                 return (
                   <React.Fragment key={`${key}-${i}`}>
-                    <tr className={`border-b border-gray-50 hover:bg-gray-50/50 transition-colors ${isOpen ? 'bg-gray-50/50' : ''}`}>
+                    <tr className={`border-b border-gray-50 hover:bg-gray-50/50 transition-colors ${isOpen ? 'bg-gray-50/50' : ''} ${checked ? 'bg-blue-50/30' : ''}`}>
+
+                      {/* Checkbox */}
+                      <td className="pl-4 pr-2 py-3">
+                        {hasUrl && (
+                          <button
+                            onClick={() => toggleRow(row)}
+                            className={`flex items-center justify-center w-5 h-5 rounded transition-colors
+                              ${checked ? 'text-[#0000E1]' : 'text-gray-300 hover:text-gray-500'}`}>
+                            {checked ? <IconCheckSquare s={15}/> : <IconSquare s={15}/>}
+                          </button>
+                        )}
+                      </td>
 
                       {/* Producto */}
                       <td className="px-4 py-3">
@@ -687,15 +812,12 @@ export default function Analytics() {
                       <td className="px-4 py-3">
                         <VerifBadge
                           state={verif}
-                          onClick={() => {
-                            if (!verif || verif.loading) handleVerify(row)
-                            else setOpenPanel(isOpen ? null : key)
-                          }}
+                          onClick={() => handleVerify(row)}
                         />
                       </td>
                     </tr>
 
-                    {/* Result panel — in ErrorBoundary to prevent white screen */}
+                    {/* Result panel */}
                     {isOpen && verif && !verif.loading && (
                       <ErrorBoundary key={`eb-${key}`}>
                         <ResultPanel state={verif} onClose={() => setOpenPanel(null)} />
