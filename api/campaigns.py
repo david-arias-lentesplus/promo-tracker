@@ -104,8 +104,11 @@ def gen_copy_gafas(group: dict) -> dict:
 # ─── BestSeller builder ───────────────────────────────────────
 
 def build_bestseller(records: list, max_count: int = 6) -> list:
+    # Excluir Gafas del BestSeller (tienen su propio modelo)
+    pool = [r for r in records if r.get('product_type', '').lower() != 'gafas']
+
     by_fab: dict = defaultdict(list)
-    for r in records:
+    for r in pool:
         by_fab[r['fabricante']].append(r)
 
     # Mejor producto por fabricante (mayor descuento)
@@ -114,14 +117,25 @@ def build_bestseller(records: list, max_count: int = 6) -> list:
         best[fab] = max(prods, key=lambda p: p['total_desc_pct'])
 
     result = []
-    # 1. J&J primero
+    jnj_prods = []  # todos los productos J&J, para rellenar si faltan slots
+
+    # 1. J&J primero — guardar todos sus productos para el relleno
     jnj_key = next((k for k in best if 'johnson' in k.lower()), None)
     if jnj_key:
         result.append(strip_internal(best.pop(jnj_key)))
+        # Todos los J&J ordenados por descuento (para usar como relleno)
+        jnj_all = sorted(by_fab.get(jnj_key, []), key=lambda p: -p['total_desc_pct'])
+        already = {result[0]['sku']} if result else set()
+        jnj_prods = [strip_internal(p) for p in jnj_all if p['sku'] not in already]
 
-    # 2. Resto ordenado por descuento desc
+    # 2. Resto de fabricantes ordenados por descuento desc
     remaining = sorted(best.values(), key=lambda p: -p['total_desc_pct'])
     result.extend(strip_internal(p) for p in remaining[:max_count - len(result)])
+
+    # 3. Si no llegamos a max_count, rellenar con más productos J&J
+    if len(result) < max_count and jnj_prods:
+        needed = max_count - len(result)
+        result.extend(jnj_prods[:needed])
 
     return result[:max_count]
 
