@@ -107,19 +107,37 @@ function ResultPanel({ state, onClose }) {
 
   return (
     <tr>
-      <td colSpan={8} className="px-4 pb-3 pt-0">
+      <td colSpan={9} className="px-4 pb-3 pt-0">
         <div className={`rounded-xl border p-3 ${cls}`}>
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1">
               <p className={`text-xs font-bold ${tcls} mb-1`}>{state.message}</p>
-              {state.tipo === 'precio_tachado' && det.price_original && (
+              {/* Precio tachado details */}
+              {(state.tipo === 'precio_tachado' || state.tipo === 'Precio tachado') && (det.price_full || det.price_final) && (
                 <div className="flex flex-wrap gap-4 text-[11px] text-gray-600 mt-1">
-                  <span>Precio original: <strong className="line-through">${det.price_original?.toLocaleString()}</strong></span>
-                  <span>Precio actual: <strong>${det.price_sale?.toLocaleString()}</strong></span>
-                  <span>Descuento real: <strong>{det.discount_real}%</strong></span>
-                  <span>Descuento CSV: <strong>{det.discount_csv}%</strong></span>
-                  <span>Diferencia: <strong>{det.diff_pp} pp</strong></span>
-                  <span className="text-gray-400">Método: {det.method}</span>
+                  {det.price_full  && <span>Precio full: <strong className="line-through">{det.price_full?.toLocaleString()}</strong></span>}
+                  {det.price_final && <span>Precio final: <strong>{det.price_final?.toLocaleString()}</strong></span>}
+                  {det.discount_real != null && <span>Descuento real: <strong>{det.discount_real}%</strong></span>}
+                  {det.discount_csv  != null && <span>Descuento CSV: <strong>{det.discount_csv}%</strong></span>}
+                  {det.diff_pp       != null && <span>Diferencia: <strong>{det.diff_pp} pp</strong></span>}
+                  {det.raw_full  && <span className="text-gray-400">Full raw: "{det.raw_full}"</span>}
+                  {det.raw_final && <span className="text-gray-400">Final raw: "{det.raw_final}"</span>}
+                </div>
+              )}
+              {/* Tier Price details */}
+              {(state.tipo === 'tier_price' || state.tipo === 'Tier Price') && (
+                <div className="flex flex-wrap gap-4 text-[11px] text-gray-600 mt-1">
+                  {det.fields_filled && Object.keys(det.fields_filled).length > 0 && (
+                    <span>Campos: {Object.entries(det.fields_filled).map(([k,v]) => `${k}: ${v}`).join(' | ')}</span>
+                  )}
+                  {det.qty           && <span>Cantidad: <strong>{det.qty}</strong></span>}
+                  {det.price_full    && <span>Precio full: <strong>{det.price_full?.toLocaleString()}</strong></span>}
+                  {det.price_final   && <span>Precio final: <strong>{det.price_final?.toLocaleString()}</strong></span>}
+                  {det.discount_real != null && <span>Descuento real: <strong>{det.discount_real}%</strong></span>}
+                  {det.discount_csv  != null && <span>Descuento CSV: <strong>{det.discount_csv}%</strong></span>}
+                  {det.diff_pp       != null && <span>Diferencia: <strong>{det.diff_pp} pp</strong></span>}
+                  {det.cart_url      && <a href={det.cart_url} target="_blank" rel="noopener noreferrer"
+                      className="text-[#0000E1] underline">Ver carrito</a>}
                 </div>
               )}
               {state.elapsed_ms && (
@@ -265,10 +283,11 @@ export default function Analytics() {
       const res = await apiRequest('/scraper', {
         method: 'POST',
         body: JSON.stringify({
-          url:        row.product_url,
-          tipo_promo: row.tipo_promo,
-          sku:        row.sku,
-          desc_pct:   row.total_desc_pct || 0,
+          url:          row.product_url,
+          tipo_promo:   row.tipo_promo,
+          sku:          row.sku,
+          desc_pct:     row.total_desc_pct || 0,
+          qty_max_promo: row.qty_max_promo || '1',
         }),
       })
       setVerifStates(s => ({ ...s, [key]: res }))
@@ -324,7 +343,7 @@ export default function Analytics() {
           <table className="w-full min-w-[900px]">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">
-                {['Producto','SKU','Fabricante','Estado','Promo Marca','Tipo Promo','Vigencia','Verificación'].map(h => (
+                {['Producto','SKU','Fabricante','Estado','Promo Marca','Tipo Promo','Descuento','Vigencia','Verificación'].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-[11px] font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">
                     {h}
                   </th>
@@ -333,16 +352,16 @@ export default function Analytics() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={8} className="text-center py-20 text-sm text-gray-400">
+                <tr><td colSpan={9} className="text-center py-20 text-sm text-gray-400">
                   <div className="flex items-center justify-center gap-2">
                     <div className="w-5 h-5 border-2 border-[#0000E1] border-t-transparent rounded-full animate-spin"/>
                     Cargando productos…
                   </div>
                 </td></tr>
               ) : error ? (
-                <tr><td colSpan={8} className="text-center py-12 text-sm text-red-500">{error}</td></tr>
+                <tr><td colSpan={9} className="text-center py-12 text-sm text-red-500">{error}</td></tr>
               ) : data.length === 0 ? (
-                <tr><td colSpan={8} className="text-center py-16 text-sm text-gray-400">
+                <tr><td colSpan={9} className="text-center py-16 text-sm text-gray-400">
                   No hay productos para los filtros seleccionados.
                 </td></tr>
               ) : data.map((row, i) => {
@@ -403,6 +422,16 @@ export default function Analytics() {
                         {row.tipo_promo
                           ? <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 whitespace-nowrap">
                               {row.tipo_promo}
+                            </span>
+                          : <span className="text-gray-400 text-xs">—</span>
+                        }
+                      </td>
+
+                      {/* Descuento */}
+                      <td className="px-4 py-3">
+                        {row.total_desc_pct > 0
+                          ? <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-[#DEFF00] text-black">
+                              -{row.total_desc_pct}%
                             </span>
                           : <span className="text-gray-400 text-xs">—</span>
                         }

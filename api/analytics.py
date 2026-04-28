@@ -124,6 +124,7 @@ class handler(BaseHTTPRequestHandler):
                     'date_end':      s.get('date_end', ''),
                     'days_remaining':s.get('days_remaining'),
                     'total_desc_pct':s.get('total_desc_pct', 0),
+                    'qty_max_promo':  s.get('qty_max', ''),
                 }
 
             return json_response(self, 200, {
