@@ -78,6 +78,20 @@ def _parse_discount(val) -> float:
 
 # ─── Carga de imágenes ────────────────────────────────────────
 
+def _fix_url(url: str) -> str:
+    """Reescribe URLs de dominios internos distribuidora* a lentesplus.com."""
+    if not url:
+        return url
+    # Mapeo de paths con código de país de 3 letras → 2 letras ISO
+    url = url.replace('www.distribuidorazoom.com/col/', 'www.lentesplus.com/co/')
+    url = url.replace('www.distribuidorazoom.com/mex/', 'www.lentesplus.com/mx/')
+    url = url.replace('www.distribuidoragalileo.com/chl/', 'www.lentesplus.com/cl/')
+    # Fallback: cualquier dominio distribuidora* restante
+    url = re.sub(r'www\.distribuidorazoom\.com', 'www.lentesplus.com', url)
+    url = re.sub(r'www\.distribuidoragalileo\.com', 'www.lentesplus.com', url)
+    return url
+
+
 def load_image_map() -> dict:
     global _IMAGE_CACHE, _TYPE_CACHE, _URL_CACHE, _IMAGE_LOADED
     if _IMAGE_LOADED:
@@ -88,7 +102,7 @@ def load_image_map() -> dict:
             for row in csv.DictReader(f):
                 sku     = str(row.get('sku',       '')).strip()
                 img_url = str(row.get('url_image', '')).strip()
-                prod_url= str(row.get('url',       '')).strip()
+                prod_url= _fix_url(str(row.get('url', '')).strip())
                 ptype   = str(row.get('type',      '')).strip()
                 if sku:
                     if img_url:

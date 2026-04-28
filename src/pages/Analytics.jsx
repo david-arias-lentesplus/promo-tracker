@@ -2,23 +2,21 @@
  * 📄 /src/pages/Analytics.jsx
  * Auditoría de promociones — lista paginada + verificación por scraping
  */
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { apiRequest } from '@utils/api'
 import { useFilters }  from '@context/FiltersContext'
 
-// ─── Icons ─────────────────────────────────────────────────────
-const IconSearch    = ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-const IconCheck     = ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-const IconX         = ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-const IconAlert     = ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-const IconLoader    = ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-const IconPlay      = ({ s=13 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-const IconRefresh   = ({ s=13 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-const IconExternal  = ({ s=11 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-const IconChevron   = ({ s=14, dir='left' }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points={dir==='left'?'15 18 9 12 15 6':'9 18 15 12 9 6'}/></svg>
-const IconFilter    = ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+// ─── Icons ─────────────────────────────────────────────────────────
+const IconSearch   = ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+const IconCheck    = ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+const IconX        = ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+const IconAlert    = ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+const IconLoader   = ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+const IconPlay     = ({ s=13 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+const IconExternal = ({ s=11 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+const IconChevron  = ({ s=14, dir='left' }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points={dir==='left'?'15 18 9 12 15 6':'9 18 15 12 9 6'}/></svg>
 
-// ─── Helpers ────────────────────────────────────────────────────
+// ─── Helpers ────────────────────────────────────────────────────────
 function fmtDate(iso) {
   if (!iso) return '—'
   try {
@@ -28,7 +26,43 @@ function fmtDate(iso) {
   } catch { return iso }
 }
 
-// ─── Status badge (promo status) ────────────────────────────────
+// ─── Error Boundary ─────────────────────────────────────────────────
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error }
+  }
+  componentDidCatch(error, info) {
+    console.error('[Analytics ErrorBoundary]', error, info)
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <tr>
+          <td colSpan={9} className="px-4 pb-3 pt-0">
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3">
+              <p className="text-xs font-bold text-red-700 mb-1">Error al mostrar el resultado</p>
+              <p className="text-[11px] text-red-600 font-mono">
+                {String(this.state.error?.message || this.state.error)}
+              </p>
+              <button
+                className="mt-2 text-[11px] text-red-500 underline"
+                onClick={() => this.setState({ hasError: false, error: null })}>
+                Reintentar
+              </button>
+            </div>
+          </td>
+        </tr>
+      )
+    }
+    return this.props.children
+  }
+}
+
+// ─── Status badge ────────────────────────────────────────────────────
 function StatusBadge({ status }) {
   const s = (status || '').toLowerCase()
   if (s === 'activo')   return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">Activo</span>
@@ -36,7 +70,7 @@ function StatusBadge({ status }) {
   return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-500">{status || '—'}</span>
 }
 
-// ─── Days remaining pill ─────────────────────────────────────────
+// ─── Days remaining pill ─────────────────────────────────────────────
 function DaysPill({ days }) {
   if (days === null || days === undefined) return <span className="text-gray-400 text-xs">—</span>
   if (days < 0)   return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-400">Vencida</span>
@@ -46,7 +80,7 @@ function DaysPill({ days }) {
   return <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-600">{days}d</span>
 }
 
-// ─── Verification status badge ───────────────────────────────────
+// ─── Verification badge ──────────────────────────────────────────────
 function VerifBadge({ state, onClick }) {
   if (!state) return (
     <button onClick={onClick}
@@ -88,9 +122,145 @@ function VerifBadge({ state, onClick }) {
   return null
 }
 
-// ─── Result panel (shown below row) ─────────────────────────────
+// ─── Debug Panel ─────────────────────────────────────────────────────
+function DebugPanel({ debug }) {
+  const [open, setOpen] = useState(false)
+  if (!debug) return null
+
+  const screenshots = debug.screenshots       || {}
+  const steps       = Array.isArray(debug.steps) ? debug.steps : []
+  const pageUrl     = debug.page_url          || ''
+  const cartRaw     = debug.cart_raw          || ''
+  const allPrices   = debug.cart_all_prices   || []
+  const selectorHit = debug.selector_hit      || ''
+  const bodySnippet = debug.body_snippet      || debug.body_text || ''
+  const errorMsg    = debug.error             || ''
+  const legacyB64   = debug.screenshot_b64   || null
+
+  const ssEntries = Object.entries(screenshots)
+  const hasInfo   = steps.length > 0 || ssEntries.length > 0 || legacyB64 ||
+                    allPrices.length > 0 || cartRaw || bodySnippet || pageUrl || errorMsg
+
+  if (!hasInfo) return null
+
+  return (
+    <div className="mt-2 border border-gray-200 rounded-lg overflow-hidden text-[11px]">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors font-semibold text-gray-600">
+        <span>🔍 Debug paso a paso</span>
+        <span>{open ? '▲' : '▼'}</span>
+      </button>
+
+      {open && (
+        <div className="p-3 space-y-3 bg-white">
+
+          {/* Steps */}
+          {steps.length > 0 && (
+            <div>
+              <p className="font-semibold text-gray-700 mb-1">Pasos de ejecución:</p>
+              <ol className="space-y-0.5 pl-1">
+                {steps.map((s, i) => (
+                  <li key={i} className={`flex gap-2 items-start ${s.ok === false ? 'text-red-600' : 'text-gray-700'}`}>
+                    <span className="font-bold w-4 flex-shrink-0">{s.n || i + 1}</span>
+                    <span className="leading-snug">{s.msg}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+
+          {/* Page URL */}
+          {pageUrl && (
+            <p className="text-gray-600">
+              <span className="font-semibold">URL final: </span>
+              <a href={pageUrl} target="_blank" rel="noopener noreferrer"
+                className="text-[#0000E1] underline break-all">{pageUrl}</a>
+            </p>
+          )}
+
+          {/* Selector hit */}
+          {selectorHit && (
+            <p className="text-gray-600">
+              <span className="font-semibold">Selector precio: </span>
+              <code className="bg-gray-100 px-1 rounded">{selectorHit}</code>
+            </p>
+          )}
+
+          {/* Prices */}
+          {allPrices.length > 0 && (
+            <div>
+              <p className="font-semibold text-gray-700 mb-1">Precios extraídos:</p>
+              <div className="flex flex-wrap gap-2">
+                {allPrices.map((p, i) => (
+                  <span key={i} className="px-2 py-0.5 bg-gray-100 rounded font-mono">
+                    {Number(p).toLocaleString()}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Error */}
+          {errorMsg && (
+            <p className="text-red-600 font-semibold">Error: {errorMsg}</p>
+          )}
+
+          {/* Cart raw */}
+          {cartRaw && (
+            <div>
+              <p className="font-semibold text-gray-700 mb-1">Resumen del carrito:</p>
+              <pre className="bg-gray-100 rounded p-2 whitespace-pre-wrap max-h-28 overflow-y-auto text-[10px]">{cartRaw}</pre>
+            </div>
+          )}
+
+          {/* Body snippet */}
+          {bodySnippet && !cartRaw && (
+            <div>
+              <p className="font-semibold text-gray-700 mb-1">Texto de la página:</p>
+              <pre className="bg-gray-100 rounded p-2 whitespace-pre-wrap max-h-28 overflow-y-auto text-[10px]">{bodySnippet}</pre>
+            </div>
+          )}
+
+          {/* Step screenshots */}
+          {ssEntries.length > 0 && (
+            <div>
+              <p className="font-semibold text-gray-700 mb-2">Screenshots ({ssEntries.length}):</p>
+              <div className="space-y-2">
+                {ssEntries.map(([label, b64]) => (
+                  <div key={label}>
+                    <p className="text-gray-500 mb-1 font-mono">{label}</p>
+                    <img
+                      src={`data:image/png;base64,${b64}`}
+                      alt={label}
+                      className="max-w-full rounded border border-gray-200 cursor-pointer"
+                      onClick={() => window.open(`data:image/png;base64,${b64}`, '_blank')}
+                      title="Click para abrir en nueva pestaña"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Legacy single screenshot */}
+          {legacyB64 && ssEntries.length === 0 && (
+            <div>
+              <p className="font-semibold text-gray-700 mb-1">Screenshot:</p>
+              <img src={`data:image/png;base64,${legacyB64}`} alt="debug"
+                className="max-w-full rounded border border-gray-200" />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Result Panel ────────────────────────────────────────────────────
 function ResultPanel({ state, onClose }) {
   if (!state || state.loading) return null
+
   const colors = {
     ok:      'bg-emerald-50 border-emerald-200',
     warning: 'bg-amber-50 border-amber-200',
@@ -98,58 +268,134 @@ function ResultPanel({ state, onClose }) {
     pending: 'bg-gray-50 border-gray-200',
   }
   const textColors = {
-    ok: 'text-emerald-800', warning: 'text-amber-800',
-    error: 'text-red-800',  pending: 'text-gray-600',
+    ok:      'text-emerald-800',
+    warning: 'text-amber-800',
+    error:   'text-red-800',
+    pending: 'text-gray-600',
   }
-  const cls   = colors[state.status] || colors.pending
-  const tcls  = textColors[state.status] || textColors.pending
-  const det   = state.details || {}
+
+  const cls  = colors[state.status]    || colors.pending
+  const tcls = textColors[state.status] || textColors.pending
+  const det  = state.details || {}
 
   return (
     <tr>
       <td colSpan={9} className="px-4 pb-3 pt-0">
         <div className={`rounded-xl border p-3 ${cls}`}>
           <div className="flex items-start justify-between gap-3">
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <p className={`text-xs font-bold ${tcls} mb-1`}>{state.message}</p>
+
               {/* Precio tachado details */}
-              {(state.tipo === 'precio_tachado' || state.tipo === 'Precio tachado') && (det.price_full || det.price_final) && (
+              {(state.tipo === 'precio_tachado' || state.tipo === 'Precio tachado') &&
+               (det.price_full || det.price_final) && (
                 <div className="flex flex-wrap gap-4 text-[11px] text-gray-600 mt-1">
-                  {det.price_full  && <span>Precio full: <strong className="line-through">{det.price_full?.toLocaleString()}</strong></span>}
-                  {det.price_final && <span>Precio final: <strong>{det.price_final?.toLocaleString()}</strong></span>}
+                  {det.price_full  && <span>Precio full: <strong className="line-through">{Number(det.price_full).toLocaleString()}</strong></span>}
+                  {det.price_final && <span>Precio final: <strong>{Number(det.price_final).toLocaleString()}</strong></span>}
                   {det.discount_real != null && <span>Descuento real: <strong>{det.discount_real}%</strong></span>}
                   {det.discount_csv  != null && <span>Descuento CSV: <strong>{det.discount_csv}%</strong></span>}
                   {det.diff_pp       != null && <span>Diferencia: <strong>{det.diff_pp} pp</strong></span>}
-                  {det.raw_full  && <span className="text-gray-400">Full raw: "{det.raw_full}"</span>}
-                  {det.raw_final && <span className="text-gray-400">Final raw: "{det.raw_final}"</span>}
                 </div>
               )}
+
               {/* Tier Price details */}
               {(state.tipo === 'tier_price' || state.tipo === 'Tier Price') && (
-                <div className="flex flex-wrap gap-4 text-[11px] text-gray-600 mt-1">
-                  {det.fields_filled && Object.keys(det.fields_filled).length > 0 && (
-                    <span>Campos: {Object.entries(det.fields_filled).map(([k,v]) => `${k}: ${v}`).join(' | ')}</span>
+                <div className="mt-1 space-y-1.5">
+                  {/* Campos de fórmula y cantidad */}
+                  <div className="flex flex-wrap gap-3 text-[11px] text-gray-500">
+                    {det.fields_filled && Object.keys(det.fields_filled).length > 0 && (
+                      <span>Campos: {Object.entries(det.fields_filled).map(([k,v]) => `${k}: ${v}`).join(' | ')}</span>
+                    )}
+                    {det.qty && <span>Cajas: <strong>{det.qty}</strong></span>}
+                    {det.cart_url && (
+                      <a href={det.cart_url} target="_blank" rel="noopener noreferrer"
+                        className="text-[#0000E1] underline">Ver carrito ↗</a>
+                    )}
+                  </div>
+
+                  {/* Tabla de verificación de precios */}
+                  {det.subtotal && (
+                    <div className="bg-white/70 rounded-lg border border-gray-200 px-3 py-2 text-[11px] inline-flex flex-col gap-1 min-w-[260px] mt-1">
+
+                      {/* Subtotal del ítem */}
+                      <div className="flex justify-between gap-8">
+                        <span className="text-gray-500">Precio del ítem (subtotal)</span>
+                        <span className="font-semibold text-gray-700 tabular-nums">
+                          {Number(det.subtotal).toLocaleString()}
+                        </span>
+                      </div>
+
+                      {/* Descuento esperado (CSV) */}
+                      <div className="flex justify-between gap-8 text-blue-700">
+                        <span>Descuento CSV ({det.discount_csv}%)</span>
+                        <span className="font-semibold tabular-nums">
+                          −{det.expected_disc_amt != null
+                              ? Number(det.expected_disc_amt).toLocaleString()
+                              : Number(det.subtotal * det.discount_csv / 100).toLocaleString()}
+                        </span>
+                      </div>
+
+                      <div className="border-t border-gray-200 mt-0.5 pt-0.5"/>
+
+                      {/* Total esperado vs total real */}
+                      <div className="flex justify-between gap-8">
+                        <span className="text-gray-500">Total esperado</span>
+                        <span className="font-semibold tabular-nums text-gray-700">
+                          {det.expected_total != null
+                            ? Number(det.expected_total).toLocaleString()
+                            : Number(det.subtotal * (1 - det.discount_csv / 100)).toLocaleString()}
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between gap-8">
+                        <span className="text-gray-500">Total real (resumen carrito)</span>
+                        <span className={`font-bold tabular-nums ${
+                          det.diff_pp != null && det.diff_pp <= 2
+                            ? 'text-emerald-700' : 'text-red-600'
+                        }`}>
+                          {det.total != null ? Number(det.total).toLocaleString() : '—'}
+                        </span>
+                      </div>
+
+                      {/* Diferencia */}
+                      {det.diff_pp != null && (
+                        <div className={`flex justify-between gap-8 text-[10px] pt-0.5 ${
+                          det.diff_pp <= 2 ? 'text-emerald-600' : 'text-amber-600'
+                        }`}>
+                          <span>Diferencia</span>
+                          <span className="font-semibold tabular-nums">
+                            {det.diff_pp <= 2
+                              ? '✓ Dentro del rango'
+                              : `${Number(det.diff_abs ?? 0).toLocaleString()} (${det.diff_pp} pp)`}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   )}
-                  {det.qty           && <span>Cantidad: <strong>{det.qty}</strong></span>}
-                  {det.price_full    && <span>Precio full: <strong>{det.price_full?.toLocaleString()}</strong></span>}
-                  {det.price_final   && <span>Precio final: <strong>{det.price_final?.toLocaleString()}</strong></span>}
-                  {det.discount_real != null && <span>Descuento real: <strong>{det.discount_real}%</strong></span>}
-                  {det.discount_csv  != null && <span>Descuento CSV: <strong>{det.discount_csv}%</strong></span>}
-                  {det.diff_pp       != null && <span>Diferencia: <strong>{det.diff_pp} pp</strong></span>}
-                  {det.cart_url      && <a href={det.cart_url} target="_blank" rel="noopener noreferrer"
-                      className="text-[#0000E1] underline">Ver carrito</a>}
                 </div>
               )}
+
+              {/* Steps summary (always show if present) */}
+              {Array.isArray(det.steps) && det.steps.length > 0 && (
+                <div className="mt-2 space-y-0.5">
+                  {det.steps.map((s, i) => (
+                    <p key={i} className={`text-[10px] ${s.ok === false ? 'text-red-500' : 'text-gray-500'}`}>
+                      {s.msg}
+                    </p>
+                  ))}
+                </div>
+              )}
+
               {state.elapsed_ms && (
                 <p className="text-[10px] text-gray-400 mt-1">{state.elapsed_ms}ms</p>
               )}
-              {/* Debug panel for tier price inspection */}
-              {(det.debug || (state.tipo === 'tier_price' || state.tipo === 'Tier Price')) && (
-                <DebugPanel debug={det.debug} />
-              )}
+
+              {/* Debug panel */}
+              {det.debug && <DebugPanel debug={det.debug} />}
             </div>
+
             <button onClick={onClose}
-              className="flex-shrink-0 text-gray-400 hover:text-gray-700 transition-colors">
+              className="flex-shrink-0 text-gray-400 hover:text-gray-700 transition-colors mt-0.5">
               <IconX s={13} />
             </button>
           </div>
@@ -159,12 +405,12 @@ function ResultPanel({ state, onClose }) {
   )
 }
 
-// ─── Product thumbnail ───────────────────────────────────────────
+// ─── Product thumbnail ────────────────────────────────────────────────
 function Thumb({ url, name }) {
   const [err, setErr] = useState(false)
   if (!url || err) return (
     <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-      <span className="text-[8px] text-gray-400 text-center leading-tight px-0.5">{name?.slice(0,6)}</span>
+      <span className="text-[8px] text-gray-400 text-center leading-tight px-0.5">{(name || '').slice(0,6)}</span>
     </div>
   )
   return (
@@ -173,13 +419,12 @@ function Thumb({ url, name }) {
   )
 }
 
-// ─── Filter bar ──────────────────────────────────────────────────
+// ─── Filter bar ───────────────────────────────────────────────────────
 function FilterBar({ meta, filters, onChange }) {
   const sel = (k, v) => onChange({ ...filters, [k]: v, page: 1 })
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      {/* Search */}
       <div className="relative">
         <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"><IconSearch s={13}/></span>
         <input value={filters.search || ''} onChange={e => sel('search', e.target.value)}
@@ -213,11 +458,9 @@ function FilterBar({ meta, filters, onChange }) {
         {(meta.product_types || []).map(t => <option key={t} value={t}>{t}</option>)}
       </select>
 
-      {/* Active filter count */}
       {Object.entries(filters).filter(([k,v]) => k !== 'page' && k !== 'limit' && v).length > 0 && (
         <button onClick={() => onChange({ page: 1, limit: filters.limit })}
-          className="h-8 px-3 text-xs font-semibold text-red-500 border border-red-200 rounded-lg
-                     hover:bg-red-50 transition-colors">
+          className="h-8 px-3 text-xs font-semibold text-red-500 border border-red-200 rounded-lg hover:bg-red-50 transition-colors">
           Limpiar filtros
         </button>
       )}
@@ -225,33 +468,31 @@ function FilterBar({ meta, filters, onChange }) {
   )
 }
 
-// ─── Main Page ───────────────────────────────────────────────────
+// ─── Main Page ────────────────────────────────────────────────────────
 export default function Analytics() {
   const { country, dateFrom, dateTo } = useFilters()
 
-  const [data, setData]       = useState([])
-  const [meta, setMeta]       = useState({})
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState('')
-  const [filters, setFilters] = useState({ page: 1, limit: 50 })
-
-  // verifStates: { [rowKey]: { loading, status, message, details, ... } }
+  const [data,       setData]       = useState([])
+  const [meta,       setMeta]       = useState({})
+  const [loading,    setLoading]    = useState(true)
+  const [error,      setError]      = useState('')
+  const [filters,    setFilters]    = useState({ page: 1, limit: 50 })
   const [verifStates, setVerifStates] = useState({})
-  const [openPanel, setOpenPanel]     = useState(null)
+  const [openPanel,  setOpenPanel]  = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
       const p = new URLSearchParams()
-      if (country)               p.set('country',      country)
-      if (dateFrom)              p.set('date_from',    dateFrom)
-      if (dateTo)                p.set('date_to',      dateTo)
-      if (filters.search)        p.set('search',       filters.search)
-      if (filters.status)        p.set('status',       filters.status)
-      if (filters.fabricante)    p.set('fabricante',   filters.fabricante)
-      if (filters.tipo_promo)    p.set('tipo_promo',   filters.tipo_promo)
-      if (filters.product_type)  p.set('product_type', filters.product_type)
+      if (country)              p.set('country',      country)
+      if (dateFrom)             p.set('date_from',    dateFrom)
+      if (dateTo)               p.set('date_to',      dateTo)
+      if (filters.search)       p.set('search',       filters.search)
+      if (filters.status)       p.set('status',       filters.status)
+      if (filters.fabricante)   p.set('fabricante',   filters.fabricante)
+      if (filters.tipo_promo)   p.set('tipo_promo',   filters.tipo_promo)
+      if (filters.product_type) p.set('product_type', filters.product_type)
       p.set('page',  filters.page  || 1)
       p.set('limit', filters.limit || 50)
 
@@ -267,21 +508,23 @@ export default function Analytics() {
 
   useEffect(() => { load() }, [load])
 
-  // Row key: stable ID per product+promo combination
   function rowKey(row) {
     return `${row.sku || row.product_name}_${row.date_end}_${row.pais}`
   }
 
   async function handleVerify(row) {
-    if (!row.product_url) {
-      setVerifStates(s => ({ ...s, [rowKey(row)]: {
-        status: 'error', message: 'Este producto no tiene URL de producto asociada.', details: {}
-      }}))
-      setOpenPanel(rowKey(row))
-      return
-    }
     const key = rowKey(row)
     setOpenPanel(key)
+
+    if (!row.product_url) {
+      setVerifStates(s => ({ ...s, [key]: {
+        status: 'error',
+        message: 'Este producto no tiene URL asociada.',
+        details: {},
+      }}))
+      return
+    }
+
     setVerifStates(s => ({ ...s, [key]: { loading: true } }))
     try {
       const res = await apiRequest('/scraper', {
@@ -292,29 +535,24 @@ export default function Analytics() {
           sku:           row.sku,
           desc_pct:      row.total_desc_pct || 0,
           qty_max_promo: row.qty_max_promo || '1',
-          debug:         true,   // always capture debug info
+          debug:         true,
         }),
       })
       setVerifStates(s => ({ ...s, [key]: res }))
     } catch (err) {
       setVerifStates(s => ({ ...s, [key]: {
-        status: 'error', message: err.message, details: {}
+        status: 'error', message: err.message, details: {},
       }}))
     }
-  }
-
-  function handleFiltersChange(newFilters) {
-    setFilters(newFilters)
   }
 
   const totalPages = meta.total_pages || 1
   const page       = filters.page || 1
 
-  // Summary counts
-  const verifList   = Object.values(verifStates).filter(v => !v.loading)
-  const verifOk     = verifList.filter(v => v.status === 'ok').length
-  const verifWarn   = verifList.filter(v => v.status === 'warning').length
-  const verifErr    = verifList.filter(v => v.status === 'error').length
+  const verifList = Object.values(verifStates).filter(v => !v.loading)
+  const verifOk   = verifList.filter(v => v.status === 'ok').length
+  const verifWarn = verifList.filter(v => v.status === 'warning').length
+  const verifErr  = verifList.filter(v => v.status === 'error').length
 
   return (
     <div>
@@ -327,19 +565,18 @@ export default function Analytics() {
           </p>
         </div>
 
-        {/* Verif summary */}
         {verifList.length > 0 && (
           <div className="flex items-center gap-2 flex-shrink-0">
-            {verifOk > 0   && <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-700 text-xs font-bold"><IconCheck s={12}/>{verifOk} OK</span>}
+            {verifOk   > 0 && <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-700 text-xs font-bold"><IconCheck s={12}/>{verifOk} OK</span>}
             {verifWarn > 0 && <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-100 text-amber-700 text-xs font-bold"><IconAlert s={12}/>{verifWarn}</span>}
-            {verifErr > 0  && <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-100 text-red-700 text-xs font-bold"><IconX s={12}/>{verifErr} Error</span>}
+            {verifErr  > 0 && <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-100 text-red-700 text-xs font-bold"><IconX s={12}/>{verifErr} Error</span>}
           </div>
         )}
       </div>
 
       {/* Filters */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-4">
-        <FilterBar meta={meta} filters={filters} onChange={handleFiltersChange} />
+        <FilterBar meta={meta} filters={filters} onChange={setFilters} />
       </div>
 
       {/* Table */}
@@ -370,23 +607,22 @@ export default function Analytics() {
                   No hay productos para los filtros seleccionados.
                 </td></tr>
               ) : data.map((row, i) => {
-                const key   = rowKey(row)
-                const verif = verifStates[key]
+                const key    = rowKey(row)
+                const verif  = verifStates[key]
                 const isOpen = openPanel === key
 
                 return (
                   <React.Fragment key={`${key}-${i}`}>
-                    <tr className={`border-b border-gray-50 hover:bg-gray-50/50 transition-colors
-                      ${isOpen ? 'bg-gray-50/50' : ''}`}>
+                    <tr className={`border-b border-gray-50 hover:bg-gray-50/50 transition-colors ${isOpen ? 'bg-gray-50/50' : ''}`}>
 
-                      {/* Product */}
+                      {/* Producto */}
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2.5">
                           <Thumb url={row.image_url} name={row.product_name} />
                           <div className="min-w-0">
                             {row.product_url
                               ? <a href={row.product_url} target="_blank" rel="noopener noreferrer"
-                                    className="text-xs font-semibold text-[#0000E1] hover:underline line-clamp-2 leading-snug flex items-center gap-1">
+                                  className="text-xs font-semibold text-[#0000E1] hover:underline line-clamp-2 leading-snug flex items-center gap-1">
                                   {row.product_name || '—'} <IconExternal s={10}/>
                                 </a>
                               : <p className="text-xs font-semibold text-gray-800 line-clamp-2 leading-snug">{row.product_name || '—'}</p>
@@ -410,7 +646,7 @@ export default function Analytics() {
                         <span className="truncate block">{row.fabricante || '—'}</span>
                       </td>
 
-                      {/* Status */}
+                      {/* Estado */}
                       <td className="px-4 py-3">
                         <StatusBadge status={row.status} />
                       </td>
@@ -425,9 +661,7 @@ export default function Analytics() {
                       {/* Tipo Promo */}
                       <td className="px-4 py-3">
                         {row.tipo_promo
-                          ? <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 whitespace-nowrap">
-                              {row.tipo_promo}
-                            </span>
+                          ? <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 whitespace-nowrap">{row.tipo_promo}</span>
                           : <span className="text-gray-400 text-xs">—</span>
                         }
                       </td>
@@ -435,9 +669,7 @@ export default function Analytics() {
                       {/* Descuento */}
                       <td className="px-4 py-3">
                         {row.total_desc_pct > 0
-                          ? <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-[#DEFF00] text-black">
-                              -{row.total_desc_pct}%
-                            </span>
+                          ? <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-[#DEFF00] text-black">-{row.total_desc_pct}%</span>
                           : <span className="text-gray-400 text-xs">—</span>
                         }
                       </td>
@@ -451,7 +683,7 @@ export default function Analytics() {
                         </div>
                       </td>
 
-                      {/* Verification */}
+                      {/* Verificación */}
                       <td className="px-4 py-3">
                         <VerifBadge
                           state={verif}
@@ -463,9 +695,11 @@ export default function Analytics() {
                       </td>
                     </tr>
 
-                    {/* Result panel row */}
+                    {/* Result panel — in ErrorBoundary to prevent white screen */}
                     {isOpen && verif && !verif.loading && (
-                      <ResultPanel state={verif} onClose={() => setOpenPanel(null)} />
+                      <ErrorBoundary key={`eb-${key}`}>
+                        <ResultPanel state={verif} onClose={() => setOpenPanel(null)} />
+                      </ErrorBoundary>
                     )}
                   </React.Fragment>
                 )
