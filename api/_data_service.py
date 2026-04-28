@@ -22,7 +22,7 @@ COUNTRY_NAMES = {
     'AR': 'Argentina',
     'CL': 'Chile',
     'CO': 'Colombia',
-    'GL': 'Galileo',
+    # 'GL': 'Galileo',  # Galileo excluido del sistema
     'MX': 'México',
 }
 
@@ -213,6 +213,8 @@ def parse_csv(raw_text: str, image_map: dict) -> list:
 
         disc_raw   = _parse_discount(row.get('Total descuentos', 0))
         bu         = str(row.get('Business Unit', '')).strip()
+        if bu.upper() == 'GL':           # Galileo excluido del sistema
+            continue
         ds_raw     = str(row.get('Date Start', '')).strip()
         de_raw     = str(row.get('Date End',   '')).strip()
         ds_parsed  = _parse_js_date(ds_raw)

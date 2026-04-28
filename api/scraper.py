@@ -323,7 +323,94 @@ def _extract_cart_discount(page) -> dict:
     return result
 
 
-def scrape_tier_price(page, url: str, expected_pct: float, qty_max: int) -> dict:
+# ── Debug capture ──────────────────────────────────────────────
+
+def _capture_debug(page) -> dict:
+    """
+    Capture rich debug info from the current page.
+    Screenshot saved to /tmp/scraper_debug.png (local dev only).
+    Returns: {screenshot_path, page_url, page_title, body_text (truncated),
+              selectors_found: {sel: bool}, cart_html}
+    """
+    debug = {
+        'page_url':   page.url,
+        'page_title': '',
+        'body_text':  '',
+        'screenshot': None,
+        'selectors_found': {},
+        'cart_html':  '',
+        'cart_text':  '',
+        'all_divs_with_price': [],
+    }
+
+    try: debug['page_title'] = page.title()
+    except Exception: pass
+
+    try:
+        full_text = page.inner_text('body')
+        debug['body_text'] = full_text[:3000]
+    except Exception: pass
+
+    # Screenshot
+    try:
+        path = '/tmp/scraper_debug.png'
+        page.screenshot(path=path, full_page=True)
+        debug['screenshot'] = path
+    except Exception as e:
+        debug['screenshot'] = f'failed: {e}'
+
+    # Test every cart/price selector we care about
+    SELECTORS_TO_TEST = [
+        CART_SUMMARY_SEL,
+        '[class*="priceSummary"]',
+        '[class*="cartPage"]',
+        '[class*="summary"]',
+        '[class*="price"]',
+        '#root > main',
+        'body',
+    ]
+    for sel in SELECTORS_TO_TEST:
+        try:
+            el = page.query_selector(sel)
+            debug['selectors_found'][sel] = el is not None
+        except Exception:
+            debug['selectors_found'][sel] = False
+
+    # Grab whatever the cart summary area actually contains
+    for fallback_sel in [
+        CART_SUMMARY_SEL,
+        '[class*="priceSummary"]',
+        '[class*="cartPage-summary"]',
+        '[class*="summary_container"]',
+    ]:
+        try:
+            el = page.query_selector(fallback_sel)
+            if el:
+                debug['cart_html'] = el.inner_html()[:2000]
+                debug['cart_text'] = el.inner_text()[:500]
+                break
+        except Exception:
+            pass
+
+    # All elements containing price-like text
+    try:
+        price_els = page.query_selector_all('[class*="price"], [class*="Price"]')
+        for el in price_els[:20]:
+            try:
+                txt = el.inner_text().strip()
+                cls = el.get_attribute('class') or ''
+                if txt and any(c.isdigit() for c in txt):
+                    debug['all_divs_with_price'].append({'class': cls[:80], 'text': txt[:80]})
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    return debug
+
+
+
+def scrape_tier_price(page, url: str, expected_pct: float, qty_max: int, debug_mode: bool = False) -> dict:
     fields_filled = {}
     try:
         page.goto(url, wait_until='domcontentloaded', timeout=30000)
@@ -380,6 +467,7 @@ def scrape_tier_price(page, url: str, expected_pct: float, qty_max: int) -> dict
         page_text = page.inner_text('body')
 
         if CART_EMPTY_TEXT in page_text:
+            debug_info = _capture_debug(page) if debug_mode else {}
             return {
                 'status':  'error',
                 'message': 'El carrito está vacío después de intentar agregar el producto. '
@@ -388,6 +476,7 @@ def scrape_tier_price(page, url: str, expected_pct: float, qty_max: int) -> dict
                     'fields_filled': fields_filled,
                     'qty':           final_qty,
                     'cart_url':      page.url,
+                    'debug':         debug_info,
                 },
             }
 
@@ -407,6 +496,8 @@ def scrape_tier_price(page, url: str, expected_pct: float, qty_max: int) -> dict
         }
 
         if dr is None:
+            debug_info = _capture_debug(page) if debug_mode else {}
+            details['debug'] = debug_info
             return {
                 'status':  'warning',
                 'message': 'Producto agregado al carrito pero no se pudo calcular el descuento. '
@@ -438,7 +529,8 @@ def scrape_tier_price(page, url: str, expected_pct: float, qty_max: int) -> dict
 # ── Dispatch ───────────────────────────────────────────────────
 
 def _run_with_playwright(tipo_promo: str, url: str,
-                         expected_pct: float, qty_max: int) -> dict:
+                         expected_pct: float, qty_max: int,
+                         debug_mode: bool = False) -> dict:
     try:
         from playwright.sync_api import sync_playwright, TimeoutError as PwTimeout
     except ImportError:
@@ -470,7 +562,7 @@ def _run_with_playwright(tipo_promo: str, url: str,
             if tipo in ('precio tachado', 'tachado', 'strike', 'strike price'):
                 result = scrape_precio_tachado(page, url, expected_pct)
             elif tipo in ('tier price', 'tier'):
-                result = scrape_tier_price(page, url, expected_pct, qty_max)
+                result = scrape_tier_price(page, url, expected_pct, qty_max, debug_mode=debug_mode)
             else:
                 result = {
                     'status':  'pending',
@@ -522,8 +614,9 @@ class handler(BaseHTTPRequestHandler):
         if not tipo_promo:
             return json_response(self, 400, {'status': 'error', 'message': 'Campo tipo_promo requerido'})
 
-        t0     = time.time()
-        result = _run_with_playwright(tipo_promo, url, expected_pct, qty_max)
+        t0         = time.time()
+        debug_mode = bool(body.get('debug', False))
+        result = _run_with_playwright(tipo_promo, url, expected_pct, qty_max, debug_mode=debug_mode)
         result['elapsed_ms'] = round((time.time() - t0) * 1000)
         result['url']        = url
         result['sku']        = body.get('sku', '')

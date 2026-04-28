@@ -143,6 +143,10 @@ function ResultPanel({ state, onClose }) {
               {state.elapsed_ms && (
                 <p className="text-[10px] text-gray-400 mt-1">{state.elapsed_ms}ms</p>
               )}
+              {/* Debug panel for tier price inspection */}
+              {(det.debug || (state.tipo === 'tier_price' || state.tipo === 'Tier Price')) && (
+                <DebugPanel debug={det.debug} />
+              )}
             </div>
             <button onClick={onClose}
               className="flex-shrink-0 text-gray-400 hover:text-gray-700 transition-colors">
@@ -283,11 +287,12 @@ export default function Analytics() {
       const res = await apiRequest('/scraper', {
         method: 'POST',
         body: JSON.stringify({
-          url:          row.product_url,
-          tipo_promo:   row.tipo_promo,
-          sku:          row.sku,
-          desc_pct:     row.total_desc_pct || 0,
+          url:           row.product_url,
+          tipo_promo:    row.tipo_promo,
+          sku:           row.sku,
+          desc_pct:      row.total_desc_pct || 0,
           qty_max_promo: row.qty_max_promo || '1',
+          debug:         true,   // always capture debug info
         }),
       })
       setVerifStates(s => ({ ...s, [key]: res }))

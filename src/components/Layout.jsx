@@ -97,9 +97,8 @@ const COUNTRY_BTNS = [
   { code: '',   label: 'Todos'     },
   { code: 'AR', label: 'Argentina' },
   { code: 'CL', label: 'Chile'     },
-  { code: 'CO', label: 'CO'        },
+  { code: 'CO', label: 'Colombia'  },
   { code: 'MX', label: 'México'    },
-  { code: 'GL', label: 'Galileo'   },
 ]
 
 // ─── Nav items ───────────────────────────────────────────────
