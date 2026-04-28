@@ -446,7 +446,7 @@ export default function Analytics() {
   const [meta,         setMeta]         = useState({})
   const [loading,      setLoading]      = useState(true)
   const [error,        setError]        = useState('')
-  const [filters,      setFilters]      = useState({ page: 1, limit: 50 })
+  const [filters,      setFilters]      = useState({ page: 1, limit: 200 })
   const [verifStates,  setVerifStates]  = useState({})
   const [openPanel,    setOpenPanel]    = useState(null)
   const [selectedKeys, setSelectedKeys] = useState(new Set())
@@ -569,7 +569,14 @@ export default function Analytics() {
   }
 
   // ─── Selección ───────────────────────────────────────────────────
-  const scrapableRows = data.filter(r => r.product_url)
+  // Deduplicate by product_url — mismo URL no se scrappea dos veces en bulk
+  const urlSeen = new Set()
+  const scrapableRows = data.filter(r => {
+    if (!r.product_url) return false
+    if (urlSeen.has(r.product_url)) return false
+    urlSeen.add(r.product_url)
+    return true
+  })
   const allSelected   = scrapableRows.length > 0 && scrapableRows.every(r => selectedKeys.has(rowKey(r)))
   const someSelected  = scrapableRows.some(r => selectedKeys.has(rowKey(r)))
 
@@ -831,11 +838,23 @@ export default function Analytics() {
         </div>
 
         {/* Pagination */}
-        {!loading && !error && totalPages > 1 && (
+        {!loading && !error && (
           <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 bg-gray-50/50">
-            <p className="text-xs text-gray-500">
-              {meta.total?.toLocaleString()} productos · página {page} de {totalPages}
-            </p>
+            <div className="flex items-center gap-3">
+              <p className="text-xs text-gray-500">
+                {meta.total?.toLocaleString()} productos · página {page} de {totalPages}
+              </p>
+              <select
+                value={filters.limit || 200}
+                onChange={e => setFilters(f => ({ ...f, limit: Number(e.target.value), page: 1 }))}
+                className="h-7 px-2 text-xs border border-gray-200 rounded-lg bg-white text-gray-600
+                           outline-none focus:border-[#0000E1] cursor-pointer">
+                <option value={50}>50 por página</option>
+                <option value={100}>100 por página</option>
+                <option value={200}>200 por página</option>
+                <option value={500}>500 por página</option>
+              </select>
+            </div>
             <div className="flex items-center gap-1">
               <button disabled={page <= 1}
                 onClick={() => setFilters(f => ({ ...f, page: f.page - 1 }))}

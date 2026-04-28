@@ -120,13 +120,16 @@ class handler(BaseHTTPRequestHandler):
             raw_text  = fetch_csv_text()
             all_rows  = parse_csv(raw_text, image_map)
 
-            # Filtrar: país + fechas + solo Activos
+            # Filtrar: país + fechas
+            # No se filtra por status='Activo' porque el campo refleja el estado *hoy*;
+            # cuando se selecciona una fecha futura, las promos de ese período aún aparecen
+            # como 'Inactivo' en el CSV aunque deban mostrarse. El solapamiento de fechas
+            # ya garantiza que solo se muestran las promos vigentes en el rango elegido.
             filtered = apply_filters(
                 all_rows,
                 country=country,
                 date_from=date_from,
                 date_to=date_to,
-                status='Activo',
             )
 
             groups  = build_slider_groups(filtered)

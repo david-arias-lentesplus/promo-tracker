@@ -222,12 +222,14 @@ class handler(BaseHTTPRequestHandler):
             all_rows  = parse_csv(raw_text, image_map)
 
             # Pool: activos en el rango de fechas + país + filtros opcionales
+            # No se filtra por status='Activo': ese campo refleja el estado hoy.
+            # Para fechas futuras las promos aparecen como 'Inactivo' aunque sean vigentes.
+            # El solapamiento de fechas (apply_filters) ya cubre qué promos son activas.
             pool = apply_filters(
                 all_rows,
                 country=country,
                 date_from=date_from,
                 date_to=date_to,
-                status='Activo',
                 product_type=product_type,
                 use_type=use_type,
                 use_duration=use_duration,
@@ -240,7 +242,6 @@ class handler(BaseHTTPRequestHandler):
             gafas_pool    = apply_filters(
                 all_rows,
                 country=country, date_from=date_from, date_to=date_to,
-                status='Activo',
             )
             gafas_groups  = build_gafas(gafas_pool)
 

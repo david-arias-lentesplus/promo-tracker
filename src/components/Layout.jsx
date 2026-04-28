@@ -249,7 +249,12 @@ function Topbar({ onLogout }) {
         <input
           type="date"
           value={dateFrom}
-          onChange={e => setDateFrom(e.target.value)}
+          onChange={e => {
+            const val = e.target.value
+            setDateFrom(val)
+            // Si fecha fin no está fijada o es anterior al nuevo inicio, igualarla
+            if (!dateTo || dateTo < val) setDateTo(val)
+          }}
           className="h-8 px-2 text-xs bg-gray-50 border border-gray-200 rounded-lg
                      outline-none focus:border-[#0000E1] focus:ring-2 focus:ring-[#0000E1]/15
                      text-gray-700 cursor-pointer w-[130px]"
@@ -261,6 +266,7 @@ function Topbar({ onLogout }) {
         <input
           type="date"
           value={dateTo}
+          min={dateFrom || undefined}
           onChange={e => setDateTo(e.target.value)}
           className="h-8 px-2 text-xs bg-gray-50 border border-gray-200 rounded-lg
                      outline-none focus:border-[#0000E1] focus:ring-2 focus:ring-[#0000E1]/15
