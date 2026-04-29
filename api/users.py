@@ -95,7 +95,12 @@ class handler(BaseHTTPRequestHandler):
             'created_at':    datetime.date.today().isoformat(),
         }
         users.append(new_user)
-        save_users(users)
+        ok, backend = save_users(users)
+        if not ok:
+            return json_response(self, 500, {
+                'status':  'error',
+                'message': 'Cambios no guardados permanentemente. Configura GITHUB_TOKEN y GITHUB_REPO en Vercel.',
+            })
 
         return json_response(self, 201, {
             'status': 'ok',
@@ -141,9 +146,15 @@ class handler(BaseHTTPRequestHandler):
         if 'password' in body and body['password'].strip():
             target['password_hash'] = _hash_pw(body['password'].strip())
 
-        save_users(users)
+        ok, backend = save_users(users)
+        if not ok:
+            return json_response(self, 500, {
+                'status':  'error',
+                'message': 'Cambios no guardados permanentemente. Configura GITHUB_TOKEN y GITHUB_REPO en Vercel.',
+            })
         return json_response(self, 200, {
             'status':  'ok',
+            'backend': backend,
             'message': 'Usuario actualizado',
             'user':    _safe_user(target),
         })
@@ -169,7 +180,9 @@ class handler(BaseHTTPRequestHandler):
         if len(users) == original_count:
             return json_response(self, 404, {'status': 'error', 'message': 'Usuario no encontrado'})
 
-        save_users(users)
+        ok, _ = save_users(users)
+        if not ok:
+            return json_response(self, 500, {'status':'error','message':'Cambios no guardados en Vercel. Configura GITHUB_TOKEN.'})
         return json_response(self, 200, {
             'status':  'ok',
             'message': 'Usuario eliminado',

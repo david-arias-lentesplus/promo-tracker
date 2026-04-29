@@ -1,9 +1,13 @@
 """
-📄 /api/_auth.py  — Utilidad compartida de autenticación
-Headers case-insensitive (Node.js/Vite proxy envía headers en lowercase).
-Soporta CRUD de usuarios con escritura a /tmp (Vercel) o data/ (dev).
+📄 /api/_auth.py  — Autenticación y persistencia de usuarios
+
+Backends de escritura (por prioridad):
+  1. GitHub API  — si GITHUB_TOKEN + GITHUB_REPO están en env (Vercel prod)
+                   Escribe data/users.json directo al repo → persiste entre Lambdas.
+  2. data/users.json local — desarrollo local.
+  3. /tmp/users.json — fallback efímero (mismo Lambda únicamente).
 """
-import os, json, hashlib, sys, uuid
+import os, json, hashlib, sys, uuid, urllib.request, base64
 from datetime import datetime, timezone
 
 _API_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -12,19 +16,22 @@ if _API_DIR not in sys.path:
 
 import _jwt_utils as jwt_utils
 
+# ── GitHub API config ─────────────────────────────────────────
+_GH_TOKEN  = os.environ.get('GITHUB_TOKEN',  '').strip()
+_GH_REPO   = os.environ.get('GITHUB_REPO',   '').strip()   # "org/repo"
+_GH_BRANCH = os.environ.get('GITHUB_BRANCH', 'main').strip()
+_GH_PATH   = 'data/users.json'
+
+_gh_cache: dict | None = None   # {'data': {...}, 'sha': '...'}
+
 
 def _get_header(headers, name: str) -> str:
-    """Lookup case-insensitive en dict o HTTPMessage."""
     if hasattr(headers, 'get'):
-        val = headers.get(name, '')
-        if val: return val
-        val = headers.get(name.lower(), '')
+        val = headers.get(name, '') or headers.get(name.lower(), '')
         if val: return val
     if isinstance(headers, dict):
-        return (headers.get(name)
-                or headers.get(name.lower())
-                or headers.get(name.upper())
-                or '')
+        return (headers.get(name) or headers.get(name.lower())
+                or headers.get(name.upper()) or '')
     return ''
 
 
@@ -33,20 +40,82 @@ def _users_data_path():
     return os.path.join(base, 'data', 'users.json')
 
 
-# ─── User storage (dev: data/users.json · prod: /tmp/users.json) ─
+# ── GitHub API helpers ────────────────────────────────────────
+
+def _gh_available() -> bool:
+    return bool(_GH_TOKEN and _GH_REPO)
+
+
+def _gh_headers() -> dict:
+    return {
+        'Authorization': f'token {_GH_TOKEN}',
+        'Accept':        'application/vnd.github.v3+json',
+        'User-Agent':    'PromoTracker/1.0',
+        'Content-Type':  'application/json',
+    }
+
+
+def _gh_load() -> tuple:
+    """Descarga data/users.json desde GitHub. Retorna (data_dict, sha)."""
+    global _gh_cache
+    if _gh_cache:
+        return _gh_cache['data'], _gh_cache['sha']
+    try:
+        url = (f"https://api.github.com/repos/{_GH_REPO}"
+               f"/contents/{_GH_PATH}?ref={_GH_BRANCH}")
+        req = urllib.request.Request(url, headers=_gh_headers())
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            payload = json.loads(resp.read())
+        content = base64.b64decode(payload['content']).decode('utf-8')
+        data = json.loads(content)
+        sha  = payload['sha']
+        _gh_cache = {'data': data, 'sha': sha}
+        return data, sha
+    except Exception as e:
+        print(f"[_auth] GitHub load error: {e}")
+        return None, None
+
+
+def _gh_save(data: dict, sha: str) -> bool:
+    """Escribe data/users.json en GitHub vía API (commit directo al repo)."""
+    global _gh_cache
+    try:
+        content_b64 = base64.b64encode(
+            json.dumps(data, indent=2, ensure_ascii=False).encode('utf-8')
+        ).decode('ascii')
+        body = json.dumps({
+            'message': 'chore: update users [skip ci]',
+            'content': content_b64,
+            'sha':     sha,
+            'branch':  _GH_BRANCH,
+        }).encode('utf-8')
+        url = f"https://api.github.com/repos/{_GH_REPO}/contents/{_GH_PATH}"
+        req = urllib.request.Request(url, data=body, method='PUT',
+                                     headers=_gh_headers())
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            result = json.loads(resp.read())
+        new_sha = result.get('content', {}).get('sha', sha)
+        _gh_cache = {'data': data, 'sha': new_sha}
+        return True
+    except Exception as e:
+        print(f"[_auth] GitHub save error: {e}")
+        return False
+
+
+# ── Storage: load / save ──────────────────────────────────────
 
 def _load_users_raw() -> dict:
-    """
-    Carga usuarios combinando data/users.json (fuente base, siempre committeada)
-    con /tmp/users.json (adiciones en runtime de Vercel).
+    global _gh_cache
+    _gh_cache = None   # Invalidar cache en cada carga fresca
 
-    Estrategia de merge:
-      · data/users.json  → fuente de verdad (usuarios committeados)
-      · /tmp/users.json  → usuarios creados via UI en runtime (efímeros por Lambda)
-    Los usuarios de data/ siempre están disponibles; los de /tmp se agregan encima.
-    Así un /tmp viejo (Lambda caliente) no oculta usuarios nuevos committeados.
-    """
-    # Leer fuente base (committeada al repo)
+    # 1. GitHub API
+    if _gh_available():
+        data, sha = _gh_load()
+        if data is not None:
+            return data
+        print("[_auth] GitHub load failed → fallback a archivo local")
+
+    # 2. Archivo local (dev)
     base: dict = {'users': []}
     try:
         with open(_users_data_path(), 'r', encoding='utf-8') as f:
@@ -54,19 +123,16 @@ def _load_users_raw() -> dict:
     except Exception:
         pass
 
-    # Agregar usuarios de /tmp que no existan en la base (creados en runtime)
+    # 3. Merge con /tmp si existe (mismo Lambda, sin GitHub)
     if os.path.exists('/tmp/users.json'):
         try:
             with open('/tmp/users.json', 'r', encoding='utf-8') as f:
                 tmp_data = json.load(f)
             base_usernames = {u['username'] for u in base.get('users', [])}
-            base_ids       = {u.get('id','') for u in base.get('users', [])}
             for u in tmp_data.get('users', []):
-                # Incluir solo si no está ya en la base (por username o id)
-                if u['username'] not in base_usernames and u.get('id','') not in base_ids:
+                if u['username'] not in base_usernames:
                     base.setdefault('users', []).append(u)
                 else:
-                    # Actualizar datos si el usuario base fue modificado en /tmp
                     for i, bu in enumerate(base['users']):
                         if bu['username'] == u['username']:
                             base['users'][i] = u
@@ -77,33 +143,57 @@ def _load_users_raw() -> dict:
     return base
 
 
-def _save_users_raw(data: dict) -> None:
-    """Save users dict. Tries data/ (dev), falls back to /tmp (Vercel)."""
+def _save_users_raw(data: dict) -> tuple[bool, str]:
+    """
+    Guarda usuarios. Retorna (persistido: bool, backend: str).
+    backend = 'github' | 'local' | 'tmp'
+    persistido=False → /tmp efímero, no sobrevivirá a otra Lambda.
+    """
+    # 1. GitHub API
+    if _gh_available():
+        _, sha = _gh_load()
+        if sha and _gh_save(data, sha):
+            return True, 'github'
+        print("[_auth] GitHub save failed → fallback a local")
+
+    # 2. Archivo local (dev)
     try:
         with open(_users_data_path(), 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
-        # Also keep /tmp in sync if it exists
-        if os.path.exists('/tmp/users.json'):
+        try:
             with open('/tmp/users.json', 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
-        return
+        except Exception:
+            pass
+        return True, 'local'
     except (PermissionError, OSError):
         pass
-    # Vercel: write to /tmp
-    with open('/tmp/users.json', 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
 
+    # 3. /tmp fallback
+    try:
+        with open('/tmp/users.json', 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        return False, 'tmp'
+    except Exception as e:
+        print(f"[_auth] /tmp save error: {e}")
+        return False, 'error'
+
+
+# ── Public API ────────────────────────────────────────────────
 
 def load_users() -> list:
-    """Returns list of user dicts."""
     return _load_users_raw().get('users', [])
 
 
-def save_users(users_list: list) -> None:
-    """Persist user list preserving meta keys."""
+def save_users(users_list: list) -> tuple[bool, str]:
+    """
+    Guarda la lista de usuarios.
+    Retorna (ok: bool, backend: str).
+    ok=False → no persistirá entre invocaciones de Lambda en Vercel.
+    """
     raw = _load_users_raw()
     raw['users'] = users_list
-    _save_users_raw(raw)
+    return _save_users_raw(raw)
 
 
 def find_user(username: str, password: str):
@@ -132,13 +222,9 @@ def generate_user_id() -> str:
     return 'usr_' + uuid.uuid4().hex[:8]
 
 
-# ─── Token helpers ────────────────────────────────────────────
+# ── Token helpers ─────────────────────────────────────────────
 
 def validate_token(headers) -> tuple:
-    """
-    Valida JWT del header Authorization.
-    Retorna (is_valid: bool, username_or_error: str)
-    """
     auth = _get_header(headers, 'Authorization')
     if not auth or not auth.startswith('Bearer '):
         return False, "Token no proporcionado"
@@ -151,9 +237,6 @@ def validate_token(headers) -> tuple:
 
 
 def get_token_payload(headers) -> dict | None:
-    """
-    Decodifica y retorna el payload del JWT, o None si inválido.
-    """
     auth = _get_header(headers, 'Authorization')
     if not auth or not auth.startswith('Bearer '):
         return None
@@ -165,10 +248,6 @@ def get_token_payload(headers) -> dict | None:
 
 
 def validate_admin(headers) -> tuple:
-    """
-    Valida que el token pertenezca a un usuario con role='admin'.
-    Retorna (is_admin: bool, message: str, payload: dict|None)
-    """
     payload = get_token_payload(headers)
     if not payload:
         return False, "Token inválido o no proporcionado", None
@@ -177,10 +256,9 @@ def validate_admin(headers) -> tuple:
     return True, payload.get('sub', ''), payload
 
 
-# ─── JSON response helper ─────────────────────────────────────
+# ── JSON response helper ──────────────────────────────────────
 
 def json_response(handler, status: int, body: dict):
-    """Envía respuesta JSON desde un BaseHTTPRequestHandler."""
     data = json.dumps(body, default=str, ensure_ascii=False).encode('utf-8')
     handler.send_response(status)
     handler.send_header('Content-Type',   'application/json; charset=utf-8')

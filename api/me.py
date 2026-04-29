@@ -93,9 +93,12 @@ class handler(BaseHTTPRequestHandler):
                 return json_response(self, 400, {'status': 'error', 'message': 'La nueva contraseña debe tener al menos 6 caracteres'})
             target['password_hash'] = _hash_pw(new_pw)
 
-        save_users(users)
+        ok, backend = save_users(users)
+        if not ok:
+            return json_response(self, 500, {'status':'error','message':'Cambios no guardados permanentemente. Configura GITHUB_TOKEN y GITHUB_REPO en Vercel.'})
         return json_response(self, 200, {
             'status':  'ok',
+            'backend': backend,
             'message': 'Perfil actualizado exitosamente',
             'user':    _safe_user(target),
         })
