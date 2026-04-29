@@ -10,6 +10,15 @@
       "email": "devius123@gmail.com",
       "role": "admin",
       "created_at": "2026-01-01"
+    },
+    {
+      "id": "usr_a5c5cfa0",
+      "username": "maria.calvo",
+      "password_hash": "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92",
+      "display_name": "maria calvo",
+      "email": "maria.calvo@livocompany.com",
+      "role": "user",
+      "created_at": "2026-04-29"
     }
   ]
 }
