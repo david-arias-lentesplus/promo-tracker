@@ -993,25 +993,37 @@ def scrape_tier_price(page, url: str, expected_pct: float, qty_max: int, debug_m
         }
 
 
-# ── Dispatch ────────────────────────────────────────────────────
+# ── Dispatch: Playwright (local) ─────────────────────────────────
+
+def _playwright_available() -> bool:
+    """Devuelve True sólo si Playwright está instalado Y Chromium accesible."""
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as pw:
+            exe = pw.chromium.executable_path
+        return bool(exe) and os.path.exists(exe)
+    except Exception:
+        return False
+
 
 def _run_with_playwright(tipo_promo: str, url: str,
                          expected_pct: float, qty_max: int,
                          debug_mode: bool = False) -> dict:
     try:
         from playwright.sync_api import sync_playwright
-    except ImportError:
-        return {
-            'status':  'error',
-            'message': 'Playwright no está instalado. Ejecuta: pip install playwright && playwright install chromium',
-            'details': {},
-        }
-
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch(
+        pw_ctx  = sync_playwright().start()
+        browser = pw_ctx.chromium.launch(
             headless=True,
             args=['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--single-process'],
         )
+    except Exception as e:
+        return {
+            'status':  'error',
+            'message': f'Playwright no disponible: {e}',
+            'details': {'engine': 'playwright'},
+        }
+
+    try:
         context = browser.new_context(
             user_agent=(
                 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
@@ -1022,24 +1034,251 @@ def _run_with_playwright(tipo_promo: str, url: str,
             viewport={'width': 1280, 'height': 900},
         )
         page = context.new_page()
-
+        tipo = tipo_promo.lower().strip()
+        if tipo in ('precio tachado', 'tachado', 'strike', 'strike price'):
+            result = scrape_precio_tachado(page, url, expected_pct)
+        elif tipo in ('tier price', 'tier'):
+            result = scrape_tier_price(page, url, expected_pct, qty_max, debug_mode=debug_mode)
+        else:
+            result = {
+                'status':  'pending',
+                'message': f'Tipo "{tipo_promo}" aún sin verificador implementado.',
+                'details': {},
+            }
+        result['engine'] = 'playwright'
+    except Exception as e:
+        import traceback
+        result = {
+            'status':  'error',
+            'message': f'Error en Playwright: {e}',
+            'details': {'engine': 'playwright', 'traceback': traceback.format_exc()[-600:]},
+        }
+    finally:
         try:
-            tipo = tipo_promo.lower().strip()
-            if tipo in ('precio tachado', 'tachado', 'strike', 'strike price'):
-                result = scrape_precio_tachado(page, url, expected_pct)
-            elif tipo in ('tier price', 'tier'):
-                result = scrape_tier_price(page, url, expected_pct, qty_max, debug_mode=debug_mode)
-            else:
-                result = {
-                    'status':  'pending',
-                    'message': f'Tipo "{tipo_promo}" aún sin verificador implementado.',
-                    'details': {},
-                }
-        finally:
             browser.close()
+        except Exception:
+            pass
+        try:
+            pw_ctx.stop()
+        except Exception:
+            pass
 
     result.setdefault('tipo', tipo_promo)
     return result
+
+
+# ── Dispatch: HTTP / Magento GraphQL (Vercel fallback) ────────────
+
+import urllib.request as _urllib_req
+
+
+def _gql_post(gql_url: str, query: str, variables: dict = None) -> dict:
+    payload = json.dumps({'query': query, 'variables': variables or {}}).encode('utf-8')
+    req = _urllib_req.Request(
+        gql_url, data=payload, method='POST',
+        headers={
+            'Content-Type': 'application/json',
+            'Accept':       'application/json',
+            'User-Agent':   'Mozilla/5.0 (compatible; PromoTracker/1.0)',
+        },
+    )
+    with _urllib_req.urlopen(req, timeout=20) as resp:
+        return json.loads(resp.read())
+
+
+def _http_precio_tachado(gql_url: str, sku: str, expected_pct: float) -> dict:
+    query = """
+    query($sku: String!) {
+      products(filter: { sku: { eq: $sku } }) {
+        items {
+          sku name
+          price_range {
+            minimum_price {
+              regular_price { value }
+              final_price   { value }
+              discount { percent_off }
+            }
+          }
+        }
+      }
+    }
+    """
+    data  = _gql_post(gql_url, query, {'sku': sku})
+    items = (data.get('data') or {}).get('products', {}).get('items', [])
+    if not items:
+        return {
+            'status':  'warning',
+            'message': f'SKU "{sku}" no encontrado vía GraphQL.',
+            'details': {'engine': 'http_graphql', 'gql_url': gql_url},
+        }
+    mp      = items[0]['price_range']['minimum_price']
+    regular = mp['regular_price']['value']
+    final   = mp['final_price']['value']
+    pct_off = mp['discount']['percent_off']
+
+    details = {
+        'engine': 'http_graphql',
+        'price_full': regular, 'price_final': final,
+        'discount_real': pct_off, 'discount_csv': expected_pct,
+    }
+    if pct_off <= 0:
+        return {'status': 'warning',
+                'message': f'Sin precio tachado — {regular:,.0f} = {final:,.0f} (0% desc).',
+                'details': details}
+    diff   = round(abs(pct_off - expected_pct), 1)
+    status = 'ok' if diff <= 2 else 'warning'
+    msg    = (f'Precio tachado ✓ — {pct_off}% (esperado {expected_pct}%)' if status == 'ok'
+              else f'Descuento {pct_off}% vs esperado {expected_pct}% — dif: {diff} pp')
+    details['diff_pp'] = diff
+    return {'status': status, 'message': msg, 'details': details}
+
+
+def _http_tier_price(gql_url: str, sku: str, expected_pct: float, qty_max: int) -> dict:
+    """
+    Simula el flujo de carrito vía GraphQL:
+      1. createGuestCart
+      2. addSimpleProductsToCart (qty = qty_max)
+      3. Lee precios del carrito — el tier price se refleja en row_total
+    """
+    # ── 1. Crear carrito de invitado ──────────────────────────────
+    cart_data = _gql_post(gql_url, 'mutation { createGuestCart { cart { id } } }')
+    cart_id   = ((cart_data.get('data') or {}).get('createGuestCart') or {}).get('cart', {}).get('id')
+    if not cart_id:
+        errs = cart_data.get('errors', [])
+        return {
+            'status':  'error',
+            'message': 'No se pudo crear carrito: ' + (errs[0].get('message', str(cart_data)[:200]) if errs else str(cart_data)[:200]),
+            'details': {'engine': 'http_graphql'},
+        }
+
+    # ── 2. Agregar producto con qty = qty_max ─────────────────────
+    add_q = """
+    mutation($cartId: String!, $sku: String!, $qty: Float!) {
+      addSimpleProductsToCart(input: {
+        cart_id: $cartId,
+        cart_items: [{ data: { sku: $sku, quantity: $qty } }]
+      }) {
+        cart {
+          items {
+            quantity
+            prices {
+              price     { value }
+              row_total { value }
+              discounts { amount { value } label }
+            }
+          }
+          prices {
+            subtotal_excluding_tax { value }
+            subtotal_including_tax { value }
+            grand_total            { value }
+            discounts { amount { value } label }
+          }
+        }
+      }
+    }
+    """
+    add_data = _gql_post(gql_url, add_q, {'cartId': cart_id, 'sku': sku, 'qty': float(qty_max)})
+    cart     = ((add_data.get('data') or {}).get('addSimpleProductsToCart') or {}).get('cart')
+
+    if not cart:
+        errs    = add_data.get('errors', [])
+        err_msg = errs[0].get('message', str(add_data)[:300]) if errs else str(add_data)[:300]
+        return {
+            'status':  'error',
+            'message': f'Error al agregar al carrito: {err_msg}',
+            'details': {'engine': 'http_graphql', 'cart_id': cart_id},
+        }
+
+    # ── 3. Analizar precios ───────────────────────────────────────
+    items       = cart.get('items', [])
+    cart_prices = cart.get('prices', {})
+    subtotal    = (cart_prices.get('subtotal_excluding_tax') or {}).get('value')
+    grand_total = (cart_prices.get('grand_total') or {}).get('value')
+    discounts   = cart_prices.get('discounts') or []
+
+    item_price = row_total = None
+    if items:
+        ip = (items[0].get('prices') or {}).get('price') or {}
+        rt = (items[0].get('prices') or {}).get('row_total') or {}
+        item_price = ip.get('value')
+        row_total  = rt.get('value')
+
+    # Calcular % de descuento real
+    actual_pct = 0.0
+    if item_price and row_total and item_price > 0:
+        base = item_price * qty_max
+        if base > row_total:
+            actual_pct = round((base - row_total) / base * 100, 1)
+    elif subtotal and grand_total and subtotal > grand_total:
+        actual_pct = round((subtotal - grand_total) / subtotal * 100, 1)
+
+    disc_labels = [f"{d.get('label')}: {d.get('amount',{}).get('value',0):,.0f}"
+                   for d in discounts if d]
+
+    details = {
+        'engine':        'http_graphql',
+        'cart_id':       cart_id,
+        'sku':           sku,
+        'qty':           qty_max,
+        'item_price':    item_price,
+        'row_total':     row_total,
+        'subtotal':      subtotal,
+        'grand_total':   grand_total,
+        'discounts':     disc_labels,
+        'discount_real': actual_pct,
+        'discount_csv':  expected_pct,
+    }
+
+    if actual_pct <= 0:
+        return {
+            'status':  'warning',
+            'message': (f'Tier Price no detectado con qty={qty_max}. '
+                        f'Precio unitario: {item_price}, Row total: {row_total}. '
+                        f'Verifica que el SKU sea correcto y la promo esté activa.'),
+            'details': details,
+        }
+
+    diff   = round(abs(actual_pct - expected_pct), 1)
+    status = 'ok' if diff <= 2 else 'warning'
+    msg    = (f'Tier Price activo ✓ — {actual_pct}% con qty={qty_max} (esperado {expected_pct}%)' if status == 'ok'
+              else f'Descuento {actual_pct}% vs esperado {expected_pct}% — dif: {diff} pp')
+    details['diff_pp'] = diff
+    return {'status': status, 'message': msg, 'details': details}
+
+
+def _run_http(tipo_promo: str, url: str, expected_pct: float,
+              qty_max: int, sku: str = '') -> dict:
+    """Fallback sin navegador: usa Magento GraphQL API."""
+    try:
+        from urllib.parse import urlparse
+        parsed  = urlparse(url)
+        gql_url = f"{parsed.scheme}://{parsed.netloc}/graphql"
+        tipo    = tipo_promo.lower().strip()
+
+        if not sku:
+            return {
+                'status':  'warning',
+                'message': 'Se requiere el campo "sku" para la verificación vía GraphQL (motor HTTP).',
+                'details': {'engine': 'http_graphql', 'gql_url': gql_url},
+            }
+
+        if tipo in ('precio tachado', 'tachado', 'strike', 'strike price'):
+            return _http_precio_tachado(gql_url, sku, expected_pct)
+        elif tipo in ('tier price', 'tier'):
+            return _http_tier_price(gql_url, sku, expected_pct, qty_max)
+        else:
+            return {
+                'status':  'pending',
+                'message': f'Tipo "{tipo_promo}" sin verificador HTTP. Usa Playwright localmente.',
+                'details': {'engine': 'http_graphql'},
+            }
+    except Exception as e:
+        import traceback
+        return {
+            'status':  'error',
+            'message': f'Error en motor HTTP/GraphQL: {e}',
+            'details': {'engine': 'http_graphql', 'traceback': traceback.format_exc()[-600:]},
+        }
 
 
 # ── HTTP Handler ─────────────────────────────────────────────────
@@ -1066,6 +1305,7 @@ class handler(BaseHTTPRequestHandler):
 
         url          = (body.get('url')          or '').strip()
         tipo_promo   = (body.get('tipo_promo')   or '').strip()
+        sku          = (body.get('sku')          or '').strip()
         expected_pct = float(body.get('desc_pct', 0) or 0)
         qty_max_raw  = str(body.get('qty_max_promo', '1') or '1').strip()
         debug_mode   = bool(body.get('debug', False))
@@ -1073,18 +1313,33 @@ class handler(BaseHTTPRequestHandler):
         # Extraer solo dígitos de qty_max_promo (puede venir como "4", "4 cajas", etc.)
         qty_digits = re.sub(r'\D', '', qty_max_raw)
         qty_max    = max(1, int(qty_digits)) if qty_digits else 1
-        print(f"  [scraper] qty_max_raw={qty_max_raw!r} → qty_max={qty_max}")
+        print(f"  [scraper] qty_max_raw={qty_max_raw!r} → qty_max={qty_max} sku={sku!r}")
 
         if not url:
             return json_response(self, 400, {'status': 'error', 'message': 'Campo url requerido'})
         if not tipo_promo:
             return json_response(self, 400, {'status': 'error', 'message': 'Campo tipo_promo requerido'})
 
-        t0     = time.time()
-        result = _run_with_playwright(tipo_promo, url, expected_pct, qty_max, debug_mode=debug_mode)
+        t0 = time.time()
+        try:
+            if _playwright_available():
+                print('  [scraper] Motor: Playwright')
+                result = _run_with_playwright(tipo_promo, url, expected_pct, qty_max, debug_mode=debug_mode)
+            else:
+                print('  [scraper] Motor: HTTP/GraphQL (Playwright no disponible en este entorno)')
+                result = _run_http(tipo_promo, url, expected_pct, qty_max, sku=sku)
+        except Exception as e:
+            import traceback
+            result = {
+                'status':  'error',
+                'message': f'Error inesperado en el motor de verificación: {e}',
+                'details': {'traceback': traceback.format_exc()[-600:]},
+            }
+
         result['elapsed_ms'] = round((time.time() - t0) * 1000)
         result['url']        = url
-        result['sku']        = body.get('sku', '')
+        result['sku']        = sku
+        result.setdefault('tipo', tipo_promo)
 
         return json_response(self, 200, result)
 
