@@ -1,0 +1,38 @@
+{
+  "monthly": {
+    "2026-04": {
+      "calls": 2,
+      "units_used": 3,
+      "history": [
+        {
+          "id": "scr_20260430_0001",
+          "timestamp": "2026-04-30T00:00:00Z",
+          "tipo_promo": "Tier Price",
+          "sku": "",
+          "url": "",
+          "elapsed_ms": 60000,
+          "units": 2,
+          "status": "error",
+          "engine": "browserless",
+          "notes": "Prueba inicial — error timeout (parámetro incorrecto)"
+        },
+        {
+          "id": "scr_20260430_0002",
+          "timestamp": "2026-04-30T00:01:00Z",
+          "tipo_promo": "Precio Tachado",
+          "sku": "",
+          "url": "",
+          "elapsed_ms": 25000,
+          "units": 1,
+          "status": "error",
+          "engine": "browserless",
+          "notes": "Prueba inicial — error timeout (parámetro incorrecto)"
+        }
+      ]
+    }
+  },
+  "plan": {
+    "units_per_month": 1000,
+    "reset_day": 1
+  }
+}

@@ -102,7 +102,18 @@
       "use": "@vercel/python",
       "config": {
         "includeFiles": [
-          "api/_*.py"
+          "api/_*.py",
+          "data/scraper_stats.json"
+        ]
+      }
+    },
+    {
+      "src": "api/scraper_stats.py",
+      "use": "@vercel/python",
+      "config": {
+        "includeFiles": [
+          "api/_*.py",
+          "data/scraper_stats.json"
         ]
       }
     },

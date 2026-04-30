@@ -256,6 +256,124 @@ def validate_admin(headers) -> tuple:
     return True, payload.get('sub', ''), payload
 
 
+# ── Scraper Stats: load / save ────────────────────────────────
+#
+# Mismo patrón que users.json:
+#   1. GitHub API  (Vercel prod)
+#   2. data/scraper_stats.json local
+#   3. /tmp/scraper_stats.json fallback efímero
+#
+_GH_STATS_PATH  = 'data/scraper_stats.json'
+_gh_stats_cache: dict | None = None
+
+_STATS_DEFAULT = {'monthly': {}, 'plan': {'units_per_month': 1000, 'reset_day': 1}}
+
+
+def _stats_data_path():
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, 'data', 'scraper_stats.json')
+
+
+def _gh_stats_load() -> tuple:
+    global _gh_stats_cache
+    if _gh_stats_cache:
+        return _gh_stats_cache['data'], _gh_stats_cache['sha']
+    try:
+        url = (f"https://api.github.com/repos/{_GH_REPO}"
+               f"/contents/{_GH_STATS_PATH}?ref={_GH_BRANCH}")
+        req = urllib.request.Request(url, headers=_gh_headers())
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            payload = json.loads(resp.read())
+        content = base64.b64decode(payload['content']).decode('utf-8')
+        data = json.loads(content)
+        sha  = payload['sha']
+        _gh_stats_cache = {'data': data, 'sha': sha}
+        return data, sha
+    except Exception as e:
+        print(f"[_auth] GitHub stats load error: {e}")
+        return None, None
+
+
+def _gh_stats_save(data: dict, sha: str) -> bool:
+    global _gh_stats_cache
+    try:
+        content_b64 = base64.b64encode(
+            json.dumps(data, indent=2, ensure_ascii=False).encode('utf-8')
+        ).decode('ascii')
+        body = json.dumps({
+            'message': 'chore: update scraper stats [skip ci]',
+            'content': content_b64,
+            'sha':     sha,
+            'branch':  _GH_BRANCH,
+        }).encode('utf-8')
+        url = f"https://api.github.com/repos/{_GH_REPO}/contents/{_GH_STATS_PATH}"
+        req = urllib.request.Request(url, data=body, method='PUT',
+                                     headers=_gh_headers())
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            result = json.loads(resp.read())
+        new_sha = result.get('content', {}).get('sha', sha)
+        _gh_stats_cache = {'data': data, 'sha': new_sha}
+        return True
+    except Exception as e:
+        print(f"[_auth] GitHub stats save error: {e}")
+        return False
+
+
+def load_scraper_stats() -> dict:
+    global _gh_stats_cache
+    _gh_stats_cache = None  # invalidar cache en cada carga
+
+    if _gh_available():
+        data, sha = _gh_stats_load()
+        if data is not None:
+            return data
+        print("[_auth] GitHub stats load failed → fallback local")
+
+    try:
+        with open(_stats_data_path(), 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        pass
+
+    if os.path.exists('/tmp/scraper_stats.json'):
+        try:
+            with open('/tmp/scraper_stats.json', 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            pass
+
+    import copy
+    return copy.deepcopy(_STATS_DEFAULT)
+
+
+def save_scraper_stats(stats: dict) -> tuple[bool, str]:
+    if _gh_available():
+        _, sha = _gh_stats_load()
+        if sha and _gh_stats_save(stats, sha):
+            return True, 'github'
+        print("[_auth] GitHub stats save failed → fallback local")
+
+    try:
+        with open(_stats_data_path(), 'w', encoding='utf-8') as f:
+            json.dump(stats, f, indent=2, ensure_ascii=False)
+        try:
+            with open('/tmp/scraper_stats.json', 'w', encoding='utf-8') as f:
+                json.dump(stats, f, indent=2, ensure_ascii=False)
+        except Exception:
+            pass
+        return True, 'local'
+    except (PermissionError, OSError):
+        pass
+
+    try:
+        with open('/tmp/scraper_stats.json', 'w', encoding='utf-8') as f:
+            json.dump(stats, f, indent=2, ensure_ascii=False)
+        return False, 'tmp'
+    except Exception as e:
+        print(f"[_auth] stats /tmp save error: {e}")
+        return False, 'error'
+
+
 # ── JSON response helper ──────────────────────────────────────
 
 def json_response(handler, status: int, body: dict):

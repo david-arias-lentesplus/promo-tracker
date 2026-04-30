@@ -1,7 +1,6 @@
 /**
  * 📄 /src/pages/Settings.jsx
- * Admin-only: User Management
- * Allows: list users, create, edit (role/info/password), delete
+ * Admin-only: User Management + Browserless Usage Tracker
  */
 import React, { useState, useEffect, useCallback } from 'react'
 import { apiRequest } from '@utils/api'
@@ -13,6 +12,11 @@ const IconTrash   = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="
 const IconClose   = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
 const IconShield  = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
 const IconUser    = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+const IconRefresh = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+const IconCheck   = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+const IconXmark   = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+const IconClock   = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+const IconGlobe   = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
 
 // ─── Helpers ────────────────────────────────────────────────────
 function initials(name) {
@@ -24,6 +28,30 @@ function avatarColor(str) {
   let hash = 0
   for (const c of (str || '')) hash = hash * 31 + c.charCodeAt(0)
   return colors[Math.abs(hash) % colors.length]
+}
+function fmtMs(ms) {
+  if (!ms) return '—'
+  if (ms < 1000) return `${ms}ms`
+  return `${(ms / 1000).toFixed(1)}s`
+}
+function fmtTs(ts) {
+  if (!ts) return '—'
+  try {
+    return new Date(ts).toLocaleString('es-CO', {
+      month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit'
+    })
+  } catch { return ts }
+}
+function getMonthLabel(key) {
+  if (!key) return ''
+  const [y, m] = key.split('-')
+  const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+  return `${months[parseInt(m,10)-1]} ${y}`
+}
+function getResetDate() {
+  const now = new Date()
+  const next = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+  return next.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })
 }
 
 // ─── Role Badge ─────────────────────────────────────────────────
@@ -91,7 +119,6 @@ function UserModal({ user, onClose, onSaved }) {
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div>
             <h2 className="text-base font-bold text-gray-900">
@@ -103,8 +130,6 @@ function UserModal({ user, onClose, onSaved }) {
             <IconClose />
           </button>
         </div>
-
-        {/* Form */}
         <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
           {!isEdit && (
             <div>
@@ -142,13 +167,11 @@ function UserModal({ user, onClose, onSaved }) {
               <option value="admin">Admin</option>
             </select>
           </div>
-
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg px-3 py-2">
               {error}
             </div>
           )}
-
           <div className="flex gap-3 pt-1">
             <button type="button" onClick={onClose}
               className="flex-1 h-9 rounded-lg border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
@@ -214,12 +237,202 @@ function DeleteConfirm({ user, onClose, onDeleted }) {
   )
 }
 
+// ─── Browserless Usage Tracker ───────────────────────────────────
+function BrowserlessTracker() {
+  const [stats, setStats]     = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState('')
+
+  const loadStats = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const data = await apiRequest('/scraper_stats')
+      setStats(data.stats || null)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { loadStats() }, [loadStats])
+
+  // Mes actual
+  const monthKey  = new Date().toISOString().slice(0, 7)           // '2026-04'
+  const monthData = stats?.monthly?.[monthKey] || { calls: 0, units_used: 0, history: [] }
+  const plan      = stats?.plan  || { units_per_month: 1000, reset_day: 1 }
+
+  const unitsUsed  = monthData.units_used  || 0
+  const unitsTotal = plan.units_per_month  || 1000
+  const calls      = monthData.calls       || 0
+  const history    = monthData.history     || []
+  const pct        = Math.min(100, Math.round((unitsUsed / unitsTotal) * 100))
+
+  const barColor = pct >= 90 ? 'bg-red-500'
+                 : pct >= 70 ? 'bg-amber-400'
+                 : 'bg-[#0000E1]'
+
+  const statusBadge = (status) => {
+    if (status === 'ok' || status === 'warning') return (
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-700">
+        <IconCheck /> ok
+      </span>
+    )
+    return (
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-600">
+        <IconXmark /> error
+      </span>
+    )
+  }
+
+  return (
+    <div className="mt-8">
+      {/* Section header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-black flex items-center justify-center">
+            <IconGlobe />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-gray-900 leading-none">Browserless</h2>
+            <p className="text-[11px] text-gray-400 mt-0.5">Consumo del plan gratuito · {getMonthLabel(monthKey)}</p>
+          </div>
+        </div>
+        <button
+          onClick={loadStats}
+          disabled={loading}
+          className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-gray-200 text-xs font-semibold
+                     text-gray-500 hover:text-gray-800 hover:border-gray-300 transition-colors disabled:opacity-50">
+          <IconRefresh /> Actualizar
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-6 py-10 text-center text-sm text-gray-400">
+          Cargando estadísticas…
+        </div>
+      ) : error ? (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-6 py-8 text-center text-sm text-red-500">
+          {error}
+        </div>
+      ) : (
+        <>
+          {/* KPI cards + barra */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-4">
+            {/* Barra de progreso */}
+            <div className="mb-5">
+              <div className="flex items-end justify-between mb-1.5">
+                <span className="text-2xl font-black text-gray-900 tabular-nums">
+                  {unitsUsed}
+                  <span className="text-sm font-semibold text-gray-400 ml-1">/ {unitsTotal.toLocaleString()} unidades</span>
+                </span>
+                <span className={`text-sm font-bold ${pct >= 90 ? 'text-red-500' : pct >= 70 ? 'text-amber-500' : 'text-[#0000E1]'}`}>
+                  {pct}%
+                </span>
+              </div>
+              <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-700 ${barColor}`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <p className="text-[11px] text-gray-400 mt-1.5 flex items-center gap-1">
+                <IconClock />
+                Reset el 1° de cada mes · Próximo reset: {getResetDate()}
+                &nbsp;·&nbsp;
+                1 unidad = hasta 30 s de sesión Chrome
+              </p>
+            </div>
+
+            {/* KPI grid */}
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: 'Scraps realizados', value: calls, sub: `este mes` },
+                { label: 'Unidades usadas',   value: unitsUsed, sub: `de ${unitsTotal.toLocaleString()} disponibles` },
+                { label: 'Promedio por scrap', value: calls > 0 ? (unitsUsed / calls).toFixed(1) : '—', sub: 'unidades/scrap' },
+              ].map(({ label, value, sub }) => (
+                <div key={label} className="bg-gray-50 rounded-xl px-4 py-3">
+                  <p className="text-xs text-gray-500 font-medium mb-0.5">{label}</p>
+                  <p className="text-xl font-black text-gray-900 tabular-nums">{value}</p>
+                  <p className="text-[10px] text-gray-400">{sub}</p>
+                </div>
+              ))}
+            </div>
+
+            {pct >= 80 && (
+              <div className={`mt-4 rounded-xl px-4 py-2.5 text-xs font-semibold flex items-center gap-2
+                ${pct >= 90 ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
+                ⚠️ {pct >= 90
+                  ? `Quedan solo ${unitsTotal - unitsUsed} unidades. Considera reducir el uso o actualizar el plan.`
+                  : `Has usado el ${pct}% del plan. Quedan ${unitsTotal - unitsUsed} unidades.`}
+              </div>
+            )}
+          </div>
+
+          {/* Historial de llamadas */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                Historial de scraping — {getMonthLabel(monthKey)}
+              </span>
+              <span className="text-xs text-gray-400">{history.length} registro{history.length !== 1 ? 's' : ''}</span>
+            </div>
+
+            {history.length === 0 ? (
+              <div className="px-5 py-10 text-center text-sm text-gray-400">
+                No hay scraps registrados este mes.
+              </div>
+            ) : (
+              <>
+                {/* Table header */}
+                <div className="grid grid-cols-[1.4fr_1.2fr_0.8fr_0.8fr_0.7fr_0.6fr] gap-3 px-5 py-2
+                                text-[10px] font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-50">
+                  <span>Fecha</span>
+                  <span>Tipo promo</span>
+                  <span>SKU</span>
+                  <span>Duración</span>
+                  <span>Unidades</span>
+                  <span>Estado</span>
+                </div>
+                {history.map(entry => (
+                  <div key={entry.id}
+                    className="grid grid-cols-[1.4fr_1.2fr_0.8fr_0.8fr_0.7fr_0.6fr] gap-3 px-5 py-3 items-center
+                               border-b border-gray-50 last:border-0 hover:bg-gray-50/60 transition-colors text-xs">
+                    <span className="text-gray-500 font-mono">{fmtTs(entry.timestamp)}</span>
+                    <span className="font-semibold text-gray-800 truncate">{entry.tipo_promo || '—'}</span>
+                    <span className="text-gray-500 font-mono truncate">{entry.sku || <span className="text-gray-300">—</span>}</span>
+                    <span className="text-gray-600 tabular-nums">{fmtMs(entry.elapsed_ms)}</span>
+                    <span className="font-bold text-gray-800 tabular-nums">
+                      {entry.units} unit{entry.units !== 1 ? 's' : ''}
+                    </span>
+                    <span>{statusBadge(entry.status)}</span>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+
+          {/* Link al dashboard de Browserless */}
+          <p className="text-[11px] text-gray-400 mt-2 text-right">
+            Ver dashboard completo en{' '}
+            <a href="https://browserless.io/account" target="_blank" rel="noopener noreferrer"
+               className="text-[#0000E1] hover:underline font-medium">
+              browserless.io/account
+            </a>
+          </p>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ─── Main Page ──────────────────────────────────────────────────
 export default function Settings() {
   const [users, setUsers]       = useState([])
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState('')
-  const [modal, setModal]       = useState(null)   // null | 'create' | { edit: user } | { delete: user }
+  const [modal, setModal]       = useState(null)
   const [toast, setToast]       = useState({ msg: '', type: 'ok' })
 
   const showToast = (msg, type = 'ok') => setToast({ msg, type })
@@ -251,7 +464,7 @@ export default function Settings() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-black text-gray-900 tracking-tight">Configuración</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Gestión de usuarios del sistema</p>
+          <p className="text-sm text-gray-500 mt-0.5">Gestión de usuarios y consumo de servicios</p>
         </div>
         <button
           onClick={() => setModal('create')}
@@ -261,9 +474,8 @@ export default function Settings() {
         </button>
       </div>
 
-      {/* Table card */}
+      {/* Users table card */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        {/* Table header */}
         <div className="grid grid-cols-[2fr_2fr_1fr_1fr_auto] gap-4 px-5 py-3 bg-gray-50 border-b border-gray-100
                         text-xs font-semibold text-gray-400 uppercase tracking-wide">
           <span>Usuario</span>
@@ -273,7 +485,6 @@ export default function Settings() {
           <span>Acciones</span>
         </div>
 
-        {/* Rows */}
         {loading ? (
           <div className="px-5 py-12 text-center text-sm text-gray-400">Cargando usuarios…</div>
         ) : error ? (
@@ -285,7 +496,6 @@ export default function Settings() {
             <div key={u.id}
               className="grid grid-cols-[2fr_2fr_1fr_1fr_auto] gap-4 px-5 py-4 items-center
                          border-b border-gray-50 last:border-0 hover:bg-gray-50/60 transition-colors">
-              {/* Avatar + name */}
               <div className="flex items-center gap-3 min-w-0">
                 <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${avatarColor(u.username)}`}>
                   {initials(u.display_name || u.username)}
@@ -297,17 +507,9 @@ export default function Settings() {
                   <p className="text-xs text-gray-400 truncate">@{u.username}</p>
                 </div>
               </div>
-
-              {/* Email */}
               <span className="text-sm text-gray-600 truncate">{u.email || '—'}</span>
-
-              {/* Role */}
               <RoleBadge role={u.role} />
-
-              {/* Created */}
               <span className="text-xs text-gray-400">{u.created_at || '—'}</span>
-
-              {/* Actions */}
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => setModal({ edit: u })}
@@ -329,12 +531,14 @@ export default function Settings() {
         )}
       </div>
 
-      {/* Stats footer */}
       {!loading && !error && (
         <p className="text-xs text-gray-400 mt-3 text-right">
           {users.length} usuario{users.length !== 1 ? 's' : ''} registrado{users.length !== 1 ? 's' : ''}
         </p>
       )}
+
+      {/* ── Browserless Usage Tracker ───────────────────── */}
+      <BrowserlessTracker />
 
       {/* Modals */}
       {modal === 'create' && (

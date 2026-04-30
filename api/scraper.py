@@ -16,7 +16,7 @@ if _API_DIR not in sys.path:
     sys.path.insert(0, _API_DIR)
 
 from http.server import BaseHTTPRequestHandler
-from _auth import validate_token, json_response
+from _auth import validate_token, json_response, load_scraper_stats, save_scraper_stats
 
 
 # ── Price helpers ───────────────────────────────────────────────
@@ -1409,10 +1409,47 @@ class handler(BaseHTTPRequestHandler):
                 'details': {'traceback': traceback.format_exc()[-600:]},
             }
 
-        result['elapsed_ms'] = round((time.time() - t0) * 1000)
+        elapsed_ms = round((time.time() - t0) * 1000)
+        result['elapsed_ms'] = elapsed_ms
         result['url']        = url
         result['sku']        = sku
         result.setdefault('tipo', tipo_promo)
+
+        # ── Registrar uso en scraper_stats si usó Browserless ──────
+        engine = result.get('engine', '')
+        if 'browserless' in engine:
+            try:
+                import math, datetime
+                units     = max(1, math.ceil(elapsed_ms / 30000))
+                month_key = datetime.datetime.utcnow().strftime('%Y-%m')
+                ts        = datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')
+
+                stats = load_scraper_stats()
+                stats.setdefault('monthly', {})
+                stats['monthly'].setdefault(month_key, {'calls': 0, 'units_used': 0, 'history': []})
+
+                month = stats['monthly'][month_key]
+                month['calls']      += 1
+                month['units_used'] += units
+
+                entry = {
+                    'id':        f'scr_{ts}',
+                    'timestamp': datetime.datetime.utcnow().isoformat() + 'Z',
+                    'tipo_promo': tipo_promo,
+                    'sku':        sku,
+                    'url':        url[:120] if url else '',
+                    'elapsed_ms': elapsed_ms,
+                    'units':      units,
+                    'status':     result.get('status', 'unknown'),
+                    'engine':     engine,
+                }
+                month['history'].insert(0, entry)
+                month['history'] = month['history'][:100]   # máximo 100 entradas
+
+                save_scraper_stats(stats)
+                print(f'  [scraper] Stats guardadas: {units} unit(s) — mes {month_key}')
+            except Exception as log_err:
+                print(f'  [scraper] Warning: no se pudieron guardar stats: {log_err}')
 
         return json_response(self, 200, result)
 
