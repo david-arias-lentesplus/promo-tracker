@@ -1,9 +1,20 @@
 {
   "monthly": {
     "2026-04": {
-      "calls": 3,
-      "units_used": 4,
+      "calls": 4,
+      "units_used": 6,
       "history": [
+        {
+          "id": "scr_20260430192800",
+          "timestamp": "2026-04-30T19:28:00.655361Z",
+          "tipo_promo": "Tier Price",
+          "sku": "31JJAC134",
+          "url": "https://www.lentesplus.com/cl/producto/acuvue-oasys-max-1-day",
+          "elapsed_ms": 39340,
+          "units": 2,
+          "status": "ok",
+          "engine": "browserless"
+        },
         {
           "id": "scr_20260430192704",
           "timestamp": "2026-04-30T19:27:04.869054Z",
