@@ -19,6 +19,15 @@
       "email": "maria.calvo@livocompany.com",
       "role": "user",
       "created_at": "2026-04-29"
+    },
+    {
+      "id": "usr_fdf99aea",
+      "username": "renato",
+      "password_hash": "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92",
+      "display_name": "renato",
+      "email": "renato@livocompany.com",
+      "role": "user",
+      "created_at": "2026-04-30"
     }
   ]
 }
