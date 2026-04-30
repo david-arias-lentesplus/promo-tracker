@@ -138,7 +138,7 @@ function Sidebar() {
         })()}
       </nav>
 
-      <div className="px-4 pb-5 border-t border-white/10 pt-4">
+      <div className="px-4 pb-4 border-t border-white/10 pt-4">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
             <IconUser size={17} />
@@ -151,6 +151,22 @@ function Sidebar() {
               {getCurrentUser()?.email || ''}
             </p>
           </div>
+        </div>
+
+        {/* ── Version build label ──────────────────────────────── */}
+        {/* __APP_VERSION__ y __APP_BUILD_TIME__ son reemplazados  */}
+        {/* por Vite en build time (ver vite.config.js → define)   */}
+        <div className="mt-3 pt-2 border-t border-white/5 text-center space-y-0.5">
+          <p className="text-gray-600 text-[9px] font-mono leading-tight tracking-wider">
+            {typeof __APP_VERSION__ !== 'undefined'
+              ? `build · ${__APP_VERSION__}`
+              : 'build · dev'}
+          </p>
+          <p className="text-gray-700 text-[8px] font-mono leading-tight">
+            {typeof __APP_BUILD_TIME__ !== 'undefined'
+              ? __APP_BUILD_TIME__
+              : ''}
+          </p>
         </div>
       </div>
     </aside>

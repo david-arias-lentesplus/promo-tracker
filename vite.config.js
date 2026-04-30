@@ -1,11 +1,32 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import { execSync } from 'child_process'
+
+// ── Build-time version info ───────────────────────────────────────
+// En Vercel, VERCEL_GIT_COMMIT_SHA se inyecta automáticamente.
+// Localmente usamos git rev-parse como fallback.
+let _commitSha = 'local'
+try {
+  _commitSha = (
+    process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ||
+    execSync('git rev-parse --short HEAD 2>/dev/null').toString().trim() ||
+    'local'
+  )
+} catch (_) {}
+
+const _buildTime = new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC'
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  
+
+  // Constantes inyectadas en el bundle (reemplazadas en build time)
+  define: {
+    __APP_VERSION__:    JSON.stringify(_commitSha),
+    __APP_BUILD_TIME__: JSON.stringify(_buildTime),
+  },
+
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -17,13 +38,13 @@ export default defineConfig({
       '@context': path.resolve(__dirname, './src/context'),
     }
   },
-  
+
   build: {
     outDir: 'dist',
     emptyOutDir: true,
     sourcemap: false,
   },
-  
+
   server: {
     port: 3000,
     proxy: {

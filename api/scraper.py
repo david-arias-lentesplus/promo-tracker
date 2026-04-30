@@ -993,33 +993,91 @@ def scrape_tier_price(page, url: str, expected_pct: float, qty_max: int, debug_m
         }
 
 
-# ── Dispatch: Playwright (local) ─────────────────────────────────
+# ── Dispatch: Playwright local o Browserless.io remoto ───────────
+#
+# En Vercel no hay Chromium local. Usamos Browserless.io como motor
+# remoto: Playwright se conecta vía CDP a su API y todo el código
+# de scraping funciona sin cambios.
+#
+# Config Vercel: BROWSERLESS_TOKEN = tu token de browserless.io
+# Free tier: 6 h/mes   Paid: desde $49/mes
+# ─────────────────────────────────────────────────────────────────
+
+def _get_browser_and_ctx():
+    """
+    Retorna (pw_ctx, browser, engine_label) o lanza Exception.
+    Prioridad:
+      1. Chromium local (desarrollo)
+      2. Browserless.io via CDP (Vercel / producción)
+    """
+    from playwright.sync_api import sync_playwright
+
+    pw_ctx = sync_playwright().start()
+
+    # ── 1. Intentar Chromium local ──────────────────────────────
+    local_ok = False
+    try:
+        exe = pw_ctx.chromium.executable_path
+        local_ok = bool(exe) and os.path.exists(exe)
+    except Exception:
+        pass
+
+    if local_ok:
+        browser = pw_ctx.chromium.launch(
+            headless=True,
+            args=['--no-sandbox', '--disable-dev-shm-usage',
+                  '--disable-gpu', '--single-process'],
+        )
+        return pw_ctx, browser, 'playwright_local'
+
+    # ── 2. Browserless.io remoto ────────────────────────────────
+    bl_token = os.environ.get('BROWSERLESS_TOKEN', '').strip()
+    if not bl_token:
+        pw_ctx.stop()
+        raise RuntimeError(
+            'Chromium local no disponible y BROWSERLESS_TOKEN no configurado. '
+            'Agrega BROWSERLESS_TOKEN en Vercel → Settings → Environment Variables.'
+        )
+
+    # Timeout 90 s para tier-price (múltiples pasos)
+    cdp_url = f"wss://chrome.browserless.io?token={bl_token}&timeout=90000"
+    print(f'  [scraper] Conectando a Browserless.io...')
+    browser = pw_ctx.chromium.connect_over_cdp(cdp_url)
+    return pw_ctx, browser, 'browserless'
+
 
 def _playwright_available() -> bool:
-    """Devuelve True sólo si Playwright está instalado Y Chromium accesible."""
+    """True si hay Chromium local O si BROWSERLESS_TOKEN está configurado."""
+    # Chromium local
     try:
         from playwright.sync_api import sync_playwright
         with sync_playwright() as pw:
             exe = pw.chromium.executable_path
-        return bool(exe) and os.path.exists(exe)
+        if exe and os.path.exists(exe):
+            return True
     except Exception:
-        return False
+        pass
+    # Browserless remoto
+    return bool(os.environ.get('BROWSERLESS_TOKEN', '').strip())
 
 
 def _run_with_playwright(tipo_promo: str, url: str,
                          expected_pct: float, qty_max: int,
                          debug_mode: bool = False) -> dict:
+    pw_ctx  = None
+    browser = None
     try:
-        from playwright.sync_api import sync_playwright
-        pw_ctx  = sync_playwright().start()
-        browser = pw_ctx.chromium.launch(
-            headless=True,
-            args=['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--single-process'],
-        )
+        pw_ctx, browser, engine = _get_browser_and_ctx()
+    except ImportError:
+        return {
+            'status':  'error',
+            'message': 'Playwright no está instalado en este entorno.',
+            'details': {'engine': 'playwright'},
+        }
     except Exception as e:
         return {
             'status':  'error',
-            'message': f'Playwright no disponible: {e}',
+            'message': str(e),
             'details': {'engine': 'playwright'},
         }
 
@@ -1045,13 +1103,13 @@ def _run_with_playwright(tipo_promo: str, url: str,
                 'message': f'Tipo "{tipo_promo}" aún sin verificador implementado.',
                 'details': {},
             }
-        result['engine'] = 'playwright'
+        result['engine'] = engine
     except Exception as e:
         import traceback
         result = {
             'status':  'error',
-            'message': f'Error en Playwright: {e}',
-            'details': {'engine': 'playwright', 'traceback': traceback.format_exc()[-600:]},
+            'message': f'Error durante el scraping: {e}',
+            'details': {'engine': engine, 'traceback': traceback.format_exc()[-800:]},
         }
     finally:
         try:
