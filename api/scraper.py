@@ -1040,7 +1040,7 @@ def _get_browser_and_ctx():
         )
 
     # Timeout 90 s para tier-price (múltiples pasos)
-    cdp_url = f"wss://chrome.browserless.io?token={bl_token}&timeout=90000"
+    cdp_url = f"wss://chrome.browserless.io?token={bl_token}&timeout=120"
     print(f'  [scraper] Conectando a Browserless.io...')
     browser = pw_ctx.chromium.connect_over_cdp(cdp_url)
     return pw_ctx, browser, 'browserless'
