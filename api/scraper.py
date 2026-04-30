@@ -1040,10 +1040,25 @@ def _get_browser_and_ctx():
         )
 
     # Timeout 90 s para tier-price (múltiples pasos)
-    cdp_url = f"wss://chrome.browserless.io?token={bl_token}&timeout=120"
-    print(f'  [scraper] Conectando a Browserless.io...')
-    browser = pw_ctx.chromium.connect_over_cdp(cdp_url)
-    return pw_ctx, browser, 'browserless'
+    # Sin timeout= en la URL (usa el default del plan).
+    # El timeout de establecimiento de conexión va como parámetro de Playwright (ms).
+    cdp_url = f"wss://chrome.browserless.io?token={bl_token}"
+    print(f'  [scraper] Conectando a Browserless.io (intento)...')
+
+    last_err = None
+    for attempt in range(3):
+        try:
+            browser = pw_ctx.chromium.connect_over_cdp(cdp_url, timeout=30000)
+            print(f'  [scraper] Browserless conectado en intento {attempt + 1}')
+            return pw_ctx, browser, 'browserless'
+        except Exception as e:
+            last_err = e
+            print(f'  [scraper] Intento {attempt + 1} fallido: {e}')
+            if attempt < 2:
+                time.sleep(3)
+
+    pw_ctx.stop()
+    raise RuntimeError(f'Browserless no disponible después de 3 intentos: {last_err}')
 
 
 def _playwright_available() -> bool:
