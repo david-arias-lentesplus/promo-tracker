@@ -18,6 +18,7 @@ import Analytics           from '@pages/Analytics'
 import Settings            from '@pages/Settings'
 import AccountProfile      from '@pages/AccountProfile'
 import Notifications       from '@pages/Notifications'
+import PromoPerformance   from '@pages/PromoPerformance'
 
 /** Wraps a route so only admins can access it; others get redirected to /dashboard */
 function AdminRoute({ children }) {
@@ -40,7 +41,8 @@ export default function App() {
             <Route path="/hs-info"   element={<HSInfo         />} />
             <Route path="/campaigns" element={<Campaigns      />} />
             <Route path="/raw-data"  element={<RawData        />} />
-            <Route path="/analytics" element={<Analytics      />} />
+            <Route path="/analytics"         element={<Analytics        />} />
+            <Route path="/promo-performance" element={<PromoPerformance />} />
             <Route path="/profile"       element={<AccountProfile />} />
             <Route path="/notifications" element={<Notifications   />} />
             <Route path="/settings"  element={

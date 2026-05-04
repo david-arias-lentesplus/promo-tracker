@@ -117,6 +117,22 @@
         ]
       }
     },
+,
+,
+    {
+      "src": "api/promo_orders.py",
+      "use": "@vercel/python",
+      "config": { "includeFiles": ["api/_*.py"] }
+    }
+    {
+      "src": "api/promo_performance.py",
+      "use": "@vercel/python",
+      "config": {
+        "includeFiles": [
+          "api/_*.py"
+        ]
+      }
+    }
     {
       "src": "package.json",
       "use": "@vercel/static-build",
