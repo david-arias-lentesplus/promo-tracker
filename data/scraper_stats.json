@@ -53,9 +53,20 @@
       ]
     },
     "2026-05": {
-      "calls": 1,
-      "units_used": 2,
+      "calls": 2,
+      "units_used": 4,
       "history": [
+        {
+          "id": "scr_20260504153136",
+          "timestamp": "2026-05-04T15:31:37.017504Z",
+          "tipo_promo": "Tier Price",
+          "sku": "31JJAC119",
+          "url": "https://www.lentesplus.com/cl/producto/acuvue-oasys-astigmatismo",
+          "elapsed_ms": 47818,
+          "units": 2,
+          "status": "ok",
+          "engine": "browserless"
+        },
         {
           "id": "scr_20260501140423",
           "timestamp": "2026-05-01T14:04:23.485783Z",
