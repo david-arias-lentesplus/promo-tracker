@@ -35,10 +35,38 @@ function resolveRoot() {
   return path.join(__dirname, '..')
 }
 
-const ROOT        = resolveRoot()
-const PYTHON_BIN  = process.env.PYTHON_BIN || 'python3'
-const VITE_PORT   = 3000
-const API_PORT    = 8000
+const ROOT       = resolveRoot()
+const VITE_PORT  = 3000
+const API_PORT   = 8000
+
+// ── PATH aumentado ────────────────────────────────────────────────
+// Las apps de escritorio en macOS heredan un PATH mínimo (/usr/bin, /bin).
+// Node/npm/python3 suelen estar en Homebrew o nvm — hay que agregarlos
+// explícitamente para que spawn() los encuentre.
+const EXTRA_PATHS = [
+  '/opt/homebrew/bin',          // Homebrew Apple Silicon
+  '/opt/homebrew/sbin',
+  '/usr/local/bin',             // Homebrew Intel / instaladores clásicos
+  '/usr/local/sbin',
+  `${process.env.HOME}/.nvm/versions/node/$(ls ${process.env.HOME}/.nvm/versions/node 2>/dev/null | tail -1)/bin`,
+  `${process.env.HOME}/.nodenv/shims`,
+  `${process.env.HOME}/.volta/bin`,
+  '/usr/bin',
+  '/bin',
+]
+const CHILD_ENV = {
+  ...process.env,
+  PATH: [...EXTRA_PATHS, process.env.PATH || ''].filter(Boolean).join(':'),
+}
+
+// Resuelve la ruta real de un binario recorriendo EXTRA_PATHS
+function resolveBin(name) {
+  for (const dir of EXTRA_PATHS) {
+    const full = path.join(dir, name)
+    try { if (fs.existsSync(full)) return full } catch (_) {}
+  }
+  return name  // fallback: confiar en que esté en PATH
+}
 
 // ── Procesos hijo ─────────────────────────────────────────────────
 let pyProc   = null
@@ -52,11 +80,13 @@ function startPython() {
     console.error('[electron] dev-server.py no encontrado en:', devServerPath)
     return
   }
+  const pythonBin = process.env.PYTHON_BIN || resolveBin('python3')
+  console.log('[electron] python →', pythonBin)
   console.log('[electron] Iniciando Python dev-server en :' + API_PORT)
-  pyProc = spawn(PYTHON_BIN, [devServerPath], {
+  pyProc = spawn(pythonBin, [devServerPath], {
     cwd:   ROOT,
     stdio: 'pipe',
-    env:   { ...process.env },
+    env:   CHILD_ENV,
   })
   pyProc.stdout.on('data', d => process.stdout.write('[python] ' + d))
   pyProc.stderr.on('data', d => process.stderr.write('[python] ' + d))
@@ -65,15 +95,34 @@ function startPython() {
 
 // ── Lanzar Vite ───────────────────────────────────────────────────
 function startVite() {
+  // Preferimos npx vite directamente para no depender de que 'npm' esté en PATH
+  const npmBin  = resolveBin('npm')
+  const npxBin  = resolveBin('npx')
+  console.log('[electron] npm →', npmBin, '/ npx →', npxBin)
   console.log('[electron] Iniciando Vite en :' + VITE_PORT)
-  const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
-  viteProc = spawn(npm, ['run', 'dev'], {
+
+  // Intentar con npx vite primero; si falla, fallback a npm run dev
+  viteProc = spawn(npxBin, ['vite', '--port', String(VITE_PORT)], {
     cwd:   ROOT,
     stdio: 'pipe',
-    env:   { ...process.env, FORCE_COLOR: '1' },
+    env:   { ...CHILD_ENV, FORCE_COLOR: '1' },
   })
   viteProc.stdout.on('data', d => process.stdout.write('[vite] ' + d))
   viteProc.stderr.on('data', d => process.stderr.write('[vite] ' + d))
+  viteProc.on('error', err => {
+    // ENOENT en npx → reintentar con npm run dev
+    if (err.code === 'ENOENT') {
+      console.warn('[electron] npx no encontrado, intentando npm run dev...')
+      viteProc = spawn(npmBin, ['run', 'dev'], {
+        cwd:   ROOT,
+        stdio: 'pipe',
+        env:   { ...CHILD_ENV, FORCE_COLOR: '1' },
+        shell: true,   // último recurso: usar shell para resolver PATH
+      })
+      viteProc.stdout.on('data', d => process.stdout.write('[vite] ' + d))
+      viteProc.stderr.on('data', d => process.stderr.write('[vite] ' + d))
+    }
+  })
   viteProc.on('exit', code => console.log('[vite] proceso terminó con código', code))
 }
 
