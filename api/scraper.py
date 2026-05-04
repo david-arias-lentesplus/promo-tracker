@@ -1415,6 +1415,7 @@ def _run_with_playwright(tipo_promo: str, url: str,
             'details': {'engine': 'playwright'},
         }
 
+    context = None
     try:
         context = browser.new_context(
             user_agent=(
@@ -1448,6 +1449,11 @@ def _run_with_playwright(tipo_promo: str, url: str,
             'details': {'engine': engine, 'traceback': traceback.format_exc()[-800:]},
         }
     finally:
+        try:
+            if context is not None:
+                context.close()
+        except Exception:
+            pass
         try:
             browser.close()
         except Exception:

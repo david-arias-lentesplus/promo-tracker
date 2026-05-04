@@ -790,7 +790,8 @@ export default function Analytics() {
   useEffect(() => { setSelectedKeys(new Set()) }, [data])
 
   function rowKey(row) {
-    return `${row.sku || row.product_name}_${row.date_end}_${row.pais}`
+    const tipo = (row.tipo_promo || 'sin_tipo').replace(/\s+/g, '_')
+    return `${row.sku || row.product_name}_${row.date_end}_${row.pais}_${tipo}`
   }
 
   // ─── Verifica un solo producto ────────────────────────────────────
@@ -846,8 +847,8 @@ export default function Analytics() {
   // ─── Verificación masiva ──────────────────────────────────────────
   async function handleBulkVerify() {
     const rows = selectedKeys.size > 0
-      ? data.filter(r => selectedKeys.has(rowKey(r)))
-      : data.filter(r => r.product_url)  // "todos" = con URL
+      ? scrapableRows.filter(r => selectedKeys.has(rowKey(r)))
+      : scrapableRows  // "todos" = scrapeables (sin cupones, sin dups)
 
     if (rows.length === 0) return
 
@@ -867,6 +868,10 @@ export default function Analytics() {
       const row = rows[i]
       await verifySingle(row)
       setBulkProgress({ done: i + 1, total: rows.length })
+      // Pequeña pausa para que Browserless libere el contexto antes del siguiente scrap
+      if (i < rows.length - 1 && !bulkAbort.current) {
+        await new Promise(resolve => setTimeout(resolve, 1500))
+      }
     }
 
     setBulkRunning(false)
@@ -878,16 +883,17 @@ export default function Analytics() {
   }
 
   // ─── Selección ───────────────────────────────────────────────────
-  // Deduplicate by product_url — mismo URL no se scrappea dos veces en bulk.
-  // Cupones se excluyen (requieren código específico, no se pueden scrapear).
+  // Deduplicate by rowKey (SKU+date+pais+tipo) — mismo tipo de promo en mismo SKU
+  // no se scrappea dos veces. Cupones excluidos (requieren código específico).
   const _CUPON_TIPOS = new Set(['cupón','cupon','cupones','cupónes','código','codigo'])
   const _isCupon = (t) => { const l = (t||'').toLowerCase().trim(); return _CUPON_TIPOS.has(l) || (l.startsWith('cup') && l.length <= 12) }
-  const urlSeen = new Set()
+  const keySeen = new Set()
   const scrapableRows = data.filter(r => {
     if (!r.product_url) return false
     if (_isCupon(r.tipo_promo)) return false
-    if (urlSeen.has(r.product_url)) return false
-    urlSeen.add(r.product_url)
+    const k = rowKey(r)
+    if (keySeen.has(k)) return false
+    keySeen.add(k)
     return true
   })
   const allSelected   = scrapableRows.length > 0 && scrapableRows.every(r => selectedKeys.has(rowKey(r)))
