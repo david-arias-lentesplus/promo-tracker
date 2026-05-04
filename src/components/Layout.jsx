@@ -117,7 +117,7 @@ const IS_ELECTRON = typeof window !== 'undefined' && !!window.__electron__?.isEl
 // ─── Sidebar ─────────────────────────────────────────────────
 function Sidebar() {
   return (
-    <aside className="fixed top-0 left-0 h-screen w-[252px] bg-black flex flex-col z-30">
+    <aside className="fixed top-0 left-0 h-screen w-[230px] bg-black flex flex-col z-30">
 
       {/* Espacio para botones de semáforo macOS (solo en Electron).
           La zona es arrastrable para mover la ventana. */}
@@ -265,7 +265,7 @@ function Topbar({ onLogout }) {
 
   return (
     <header
-      className="fixed left-[252px] right-0 h-14 bg-white border-b border-gray-200
+      className="fixed left-[230px] right-0 h-14 bg-white border-b border-gray-200
                  flex items-center px-5 gap-4 z-20 overflow-x-auto"
       style={{ top: IS_ELECTRON ? 48 : 0 }}
     >
@@ -411,7 +411,7 @@ export default function Layout() {
       <Topbar onLogout={handleLogout} />
       {/* pt = topbar (56px) + spacer Electron (48px) cuando aplica */}
       <main
-        className="pl-[252px] min-h-screen"
+        className="pl-[230px] min-h-screen"
         style={{ paddingTop: IS_ELECTRON ? 48 + 56 : 56 }}
       >
         <div className="p-6">
