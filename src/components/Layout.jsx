@@ -111,10 +111,23 @@ const BASE_NAV = [
 ]
 const ADMIN_NAV = { label: 'Settings', to: '/settings', icon: IconSettings }
 
+// ─── Detección de entorno Electron ───────────────────────────
+const IS_ELECTRON = typeof window !== 'undefined' && !!window.__electron__?.isElectron
+
 // ─── Sidebar ─────────────────────────────────────────────────
 function Sidebar() {
   return (
     <aside className="fixed top-0 left-0 h-screen w-[252px] bg-black flex flex-col z-30">
+
+      {/* Espacio para botones de semáforo macOS (solo en Electron).
+          La zona es arrastrable para mover la ventana. */}
+      {IS_ELECTRON && (
+        <div
+          className="w-full flex-shrink-0"
+          style={{ height: 48, WebkitAppRegion: 'drag' }}
+        />
+      )}
+
       <div className="px-5 pt-6 pb-5 border-b border-white/10">
         <p className="text-white text-base font-black tracking-widest uppercase leading-none">
           PROMO ENGINE
@@ -214,8 +227,11 @@ function Topbar({ onLogout }) {
   }
 
   return (
-    <header className="fixed top-0 left-[252px] right-0 h-14 bg-white border-b border-gray-200
-                        flex items-center px-5 gap-4 z-20 overflow-x-auto">
+    <header
+      className="fixed left-[252px] right-0 h-14 bg-white border-b border-gray-200
+                 flex items-center px-5 gap-4 z-20 overflow-x-auto"
+      style={{ top: IS_ELECTRON ? 48 : 0 }}
+    >
 
       {/* Logo */}
       <span className="text-blue-600 text-base font-black tracking-tight shrink-0">
@@ -356,7 +372,11 @@ export default function Layout() {
     <div className="min-h-screen bg-gray-50">
       <Sidebar />
       <Topbar onLogout={handleLogout} />
-      <main className="pl-[252px] pt-14 min-h-screen">
+      {/* pt = topbar (56px) + spacer Electron (48px) cuando aplica */}
+      <main
+        className="pl-[252px] min-h-screen"
+        style={{ paddingTop: IS_ELECTRON ? 48 + 56 : 56 }}
+      >
         <div className="p-6">
           <Outlet />
         </div>

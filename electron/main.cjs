@@ -88,9 +88,9 @@ function waitForPort(port, timeout = 30000) {
 // ── Crear ventana principal ───────────────────────────────────────
 function createWindow() {
   mainWin = new BrowserWindow({
-    width:           1400,
-    height:          860,
-    minWidth:        900,
+    width:           1440,
+    height:          900,
+    minWidth:        1440,
     minHeight:       600,
     title:           'Promos SS — Dashboard',
     backgroundColor: '#f8fafc',
