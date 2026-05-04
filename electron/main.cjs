@@ -286,8 +286,9 @@ app.whenReady().then(async () => {
     log('ERROR startup:', startupError)
   }
 
-  splash.destroy()
-
+  // IMPORTANTE: createWindow ANTES de splash.destroy().
+  // Si se destruye el splash sin que haya otra ventana abierta,
+  // window-all-closed dispara y mata los procesos hijo inmediatamente.
   if (startupError) {
     const details = [
       `ROOT: ${ROOT}`,
@@ -299,6 +300,8 @@ app.whenReady().then(async () => {
   } else {
     createWindow(`http://localhost:${VITE_PORT}`)
   }
+
+  splash.destroy()
 })
 
 // ── Cleanup ───────────────────────────────────────────────────────
