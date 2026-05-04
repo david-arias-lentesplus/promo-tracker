@@ -166,10 +166,47 @@ function Sidebar() {
           </div>
         </div>
 
+        {/* ── Entorno badge ────────────────────────────────────── */}
+        {(() => {
+          const isDev  = typeof import.meta !== 'undefined' && import.meta.env?.DEV
+          const isProd = typeof import.meta !== 'undefined' && import.meta.env?.PROD
+          if (IS_ELECTRON) return (
+            <div className="mt-3 pt-2 border-t border-white/5 flex justify-center">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full
+                               bg-emerald-500/20 border border-emerald-500/30 text-emerald-400
+                               text-[10px] font-semibold tracking-wide">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"/>
+                Dev · Local
+              </span>
+            </div>
+          )
+          if (isDev) return (
+            <div className="mt-3 pt-2 border-t border-white/5 flex justify-center">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full
+                               bg-amber-500/20 border border-amber-500/30 text-amber-400
+                               text-[10px] font-semibold tracking-wide">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"/>
+                Dev · Web
+              </span>
+            </div>
+          )
+          if (isProd) return (
+            <div className="mt-3 pt-2 border-t border-white/5 flex justify-center">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full
+                               bg-blue-500/15 border border-blue-500/20 text-blue-400
+                               text-[10px] font-semibold tracking-wide">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-400"/>
+                Producción
+              </span>
+            </div>
+          )
+          return null
+        })()}
+
         {/* ── Version build label ──────────────────────────────── */}
         {/* __APP_VERSION__ y __APP_BUILD_TIME__ son reemplazados  */}
         {/* por Vite en build time (ver vite.config.js → define)   */}
-        <div className="mt-3 pt-2 border-t border-white/5 text-center space-y-0.5">
+        <div className="mt-2 text-center space-y-0.5">
           <p className="text-gray-600 text-[9px] font-mono leading-tight tracking-wider">
             {typeof __APP_VERSION__ !== 'undefined'
               ? `build · ${__APP_VERSION__}`

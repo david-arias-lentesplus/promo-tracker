@@ -20,7 +20,22 @@ const http       = require('http')
 const fs         = require('fs')
 
 // ── Rutas ─────────────────────────────────────────────────────────
-const ROOT        = path.join(__dirname, '..')
+// En modo packaged (app.isPackaged), la ruta del proyecto está guardada
+// en Resources/project-root.txt, embebida en el .app por electron-builder.
+// En modo desarrollo, __dirname es electron/ dentro del proyecto.
+function resolveRoot() {
+  if (app.isPackaged) {
+    const rootFile = path.join(process.resourcesPath, 'project-root.txt')
+    if (fs.existsSync(rootFile)) {
+      return fs.readFileSync(rootFile, 'utf-8').trim()
+    }
+    // fallback: sube desde Resources/app
+    return path.join(app.getAppPath(), '..', '..', '..', '..', '..', '..')
+  }
+  return path.join(__dirname, '..')
+}
+
+const ROOT        = resolveRoot()
 const PYTHON_BIN  = process.env.PYTHON_BIN || 'python3'
 const VITE_PORT   = 3000
 const API_PORT    = 8000

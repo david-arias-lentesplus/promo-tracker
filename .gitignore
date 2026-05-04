@@ -39,3 +39,7 @@ npm-debug.log*
 venv/
 .venv/
 env/
+
+# ─── Electron build ───────────────────────────────────────────
+dist-electron/
+electron/project-root.txt
