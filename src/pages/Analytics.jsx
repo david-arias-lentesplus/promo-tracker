@@ -791,7 +791,9 @@ export default function Analytics() {
 
   function rowKey(row) {
     const tipo = (row.tipo_promo || 'sin_tipo').replace(/\s+/g, '_')
-    return `${row.sku || row.product_name}_${row.date_end}_${row.pais}_${tipo}`
+    const qty  = String(row.qty_max_promo || '').replace(/\s+/g, '') || '0'
+    const pct  = String(row.total_desc_pct ?? '0')
+    return `${row.sku || row.product_name}_${row.date_end}_${row.pais}_${tipo}_${qty}_${pct}`
   }
 
   // ─── Verifica un solo producto ────────────────────────────────────
