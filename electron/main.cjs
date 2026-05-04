@@ -126,10 +126,22 @@ function startPython() {
 }
 
 function startVite() {
+  // Usar directorio de caché en /tmp para evitar EACCES en node_modules/.vite
+  // (ocurre cuando node_modules/.vite fue creado por otro proceso/usuario)
+  const cacheDir = path.join(require('os').tmpdir(), 'promos-ss-vite-cache')
+  log('Vite cacheDir:', cacheDir)
+
   const npxBin = resolveBin('npx')
   log('Lanzando Vite con npx:', npxBin)
 
-  viteProc = spawn(npxBin, ['vite', '--port', String(VITE_PORT), '--host', 'localhost'], {
+  const viteArgs = [
+    'vite',
+    '--port',     String(VITE_PORT),
+    '--host',     'localhost',
+    '--cacheDir', cacheDir,
+  ]
+
+  viteProc = spawn(npxBin, viteArgs, {
     cwd:   ROOT,
     stdio: 'pipe',
     shell: false,
@@ -144,7 +156,7 @@ function startVite() {
       cwd:   ROOT,
       stdio: 'pipe',
       shell: true,
-      env:   { ...CHILD_ENV, FORCE_COLOR: '0' },
+      env:   { ...CHILD_ENV, FORCE_COLOR: '0', VITE_CACHE_DIR: cacheDir },
     })
     viteProc.stdout.on('data', d => log('[vite-sh]', String(d).trim()))
     viteProc.stderr.on('data', d => log('[vite-sh]', String(d).trim()))
