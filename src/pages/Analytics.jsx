@@ -86,7 +86,20 @@ function DaysPill({ days }) {
 }
 
 // ─── Verification badge ──────────────────────────────────────────────
-function VerifBadge({ state, onClick }) {
+function VerifBadge({ state, onClick, tipoPrmo }) {
+  // Cupón: no aplica scraping
+  const isCupon = (() => {
+    const t = (tipoPrmo || '').toLowerCase().trim()
+    const CUPON_SET = new Set(['cupón','cupon','cupones','cupónes','código','codigo'])
+    return CUPON_SET.has(t) || (t.startsWith('cup') && t.length <= 12)
+  })()
+  if (isCupon) return (
+    <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-100 text-[11px] font-semibold text-gray-400 whitespace-nowrap cursor-default"
+          title="Los cupones requieren un código específico y no pueden verificarse automáticamente">
+      — No aplica
+    </span>
+  )
+
   if (!state) return (
     <button onClick={onClick}
       className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-gray-200 bg-white
@@ -98,6 +111,12 @@ function VerifBadge({ state, onClick }) {
   if (state.loading) return (
     <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-[11px] font-semibold text-blue-600 whitespace-nowrap">
       <IconLoader s={11} /> Verificando…
+    </span>
+  )
+  if (state.status === 'skipped') return (
+    <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-100 text-[11px] font-semibold text-gray-400 whitespace-nowrap"
+          title={state.message}>
+      — Omitido
     </span>
   )
   if (state.status === 'ok') return (
@@ -347,6 +366,41 @@ function ResultPanel({ state, onClose }) {
                 </div>
               )}
 
+              {/* Obsequios: lista de ítems del carrito */}
+              {(state.tipo === 'Obsequios' || state.tipo === 'obsequios') &&
+               Array.isArray(det.cart_items) && det.cart_items.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-[11px] font-semibold text-gray-600 mb-1.5">
+                    Productos en carrito ({det.cart_items.length}):
+                  </p>
+                  <div className="space-y-1.5">
+                    {det.cart_items.map((item, idx) => {
+                      const isGift = det.gift_items?.some(g => g.name === item.name)
+                      return (
+                        <div key={idx}
+                          className={`flex items-start justify-between gap-3 rounded-lg px-3 py-2 text-[11px]
+                            ${isGift ? 'bg-emerald-50 border border-emerald-200' : 'bg-gray-50 border border-gray-100'}`}>
+                          <div className="flex items-center gap-2 min-w-0">
+                            {isGift
+                              ? <span className="px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-700 font-bold text-[10px] flex-shrink-0">OBSEQUIO</span>
+                              : <span className="px-1.5 py-0.5 rounded-md bg-gray-200 text-gray-600 font-semibold text-[10px] flex-shrink-0">#{idx + 1}</span>
+                            }
+                            <span className={`truncate ${isGift ? 'font-bold text-emerald-800' : 'text-gray-700'}`}>
+                              {item.name || '—'}
+                            </span>
+                          </div>
+                          <span className={`flex-shrink-0 font-mono font-semibold ${isGift ? 'text-emerald-600' : 'text-gray-500'}`}>
+                            {item.price != null && item.price > 0
+                              ? Number(item.price).toLocaleString()
+                              : item.price === 0 ? 'Gratis' : '—'}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Steps + Debug solo cuando NO es OK */}
               {!isOk && Array.isArray(det.steps) && det.steps.length > 0 && (
                 <div className="mt-2 space-y-0.5">
@@ -443,7 +497,18 @@ function FilterBar({ meta, filters, onChange }) {
 // ─── Browserless Usage Bar ───────────────────────────────────────────
 // Muestra consumo mensual de Browserless + simulación de costo en la vista actual.
 // Solo visible para admins (el endpoint devuelve 403 para no-admins → se oculta).
-function BrowserlessBar({ scrapableCount, verifStates, currentDataKeys }) {
+function fmtMs(ms) {
+  if (!ms || ms <= 0) return '0s'
+  const s = Math.round(ms / 1000)
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  const ss = s % 60
+  return `${m}m ${ss < 10 ? '0' : ''}${ss}s`
+}
+
+function BrowserlessBar({ scrapableCount, verifStates, currentDataKeys,
+                          bulkRunning, bulkProgress, scrapTimings,
+                          verifOk, verifWarn, verifErr }) {
   const [stats,   setStats]   = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -602,6 +667,75 @@ function BrowserlessBar({ scrapableCount, verifStates, currentDataKeys }) {
           </p>
         </div>
       </div>
+
+      {/* ── Barra de progreso de verificación ── */}
+      {(bulkRunning || (verifOk + verifWarn + verifErr) > 0) && (() => {
+        const totalDone   = bulkRunning ? bulkProgress.done  : (verifOk + verifWarn + verifErr)
+        const totalTarget = bulkRunning ? bulkProgress.total : scrapableCount
+        const pctDone     = totalTarget > 0 ? Math.round(totalDone / totalTarget * 100) : 0
+        const avgMs       = scrapTimings.length > 0
+          ? scrapTimings.reduce((s, t) => s + t.elapsed_ms, 0) / scrapTimings.length
+          : 0
+        const remaining_scraps = totalTarget - totalDone
+        const etaMs       = avgMs > 0 ? remaining_scraps * avgMs : 0
+        const verifSkip   = Object.values(verifStates).filter(v => currentDataKeys.has && v.status === 'skipped').length
+
+        return (
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-gray-700">Progreso de verificación</span>
+                {bulkRunning && (
+                  <span className="flex items-center gap-1 text-[11px] text-[#0000E1] font-semibold">
+                    <IconLoader s={11}/> Ejecutando…
+                  </span>
+                )}
+              </div>
+              <span className="text-[11px] font-bold text-gray-500">
+                {totalDone}/{totalTarget} · {pctDone}%
+              </span>
+            </div>
+
+            {/* Barra segmentada por estado */}
+            <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden flex mb-2">
+              {totalTarget > 0 && (
+                <>
+                  <div className="h-full bg-emerald-400 transition-all duration-300"
+                       style={{ width: `${verifOk / totalTarget * 100}%` }} />
+                  <div className="h-full bg-amber-400 transition-all duration-300"
+                       style={{ width: `${verifWarn / totalTarget * 100}%` }} />
+                  <div className="h-full bg-red-400 transition-all duration-300"
+                       style={{ width: `${verifErr / totalTarget * 100}%` }} />
+                  <div className="h-full bg-gray-300 transition-all duration-300"
+                       style={{ width: `${verifSkip / totalTarget * 100}%` }} />
+                </>
+              )}
+            </div>
+
+            {/* Leyenda de estados */}
+            <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-[11px] mb-2">
+              {verifOk   > 0 && <span className="flex items-center gap-1 text-emerald-600 font-semibold"><span className="w-2 h-2 rounded-full bg-emerald-400 inline-block"/>✓ {verifOk} OK</span>}
+              {verifWarn > 0 && <span className="flex items-center gap-1 text-amber-600 font-semibold"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block"/>⚠ {verifWarn} Advertencia</span>}
+              {verifErr  > 0 && <span className="flex items-center gap-1 text-red-600 font-semibold"><span className="w-2 h-2 rounded-full bg-red-400 inline-block"/>✗ {verifErr} Error</span>}
+              {verifSkip > 0 && <span className="flex items-center gap-1 text-gray-400 font-semibold"><span className="w-2 h-2 rounded-full bg-gray-300 inline-block"/>— {verifSkip} Omitidos</span>}
+              {remaining_scraps > 0 && <span className="text-gray-400">{remaining_scraps} pendientes</span>}
+            </div>
+
+            {/* Tiempos */}
+            {avgMs > 0 && (
+              <div className="flex items-center gap-4 text-[10px] text-gray-400">
+                <span>⏱ Promedio por scrap: <strong className="text-gray-600">{fmtMs(avgMs)}</strong></span>
+                {bulkRunning && etaMs > 0 && (
+                  <span>ETA: <strong className="text-gray-600">~{fmtMs(etaMs)}</strong></span>
+                )}
+                {!bulkRunning && scrapTimings.length > 0 && (
+                  <span>Total sesión: <strong className="text-gray-600">{fmtMs(scrapTimings.reduce((s,t) => s + t.elapsed_ms, 0))}</strong></span>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })()}
     </div>
   )
 }
@@ -620,7 +754,9 @@ export default function Analytics() {
   const [selectedKeys, setSelectedKeys] = useState(new Set())
   const [bulkRunning,  setBulkRunning]  = useState(false)
   const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 })
-  const bulkAbort = useRef(false)
+  const [scrapTimings, setScrapTimings] = useState([])   // [{elapsed_ms, status}]
+  const bulkAbort     = useRef(false)
+  const bulkStartTime = useRef(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -685,6 +821,10 @@ export default function Analytics() {
         }),
       })
       setVerifStates(s => ({ ...s, [key]: res }))
+      // Registrar tiempo para ETA
+      if (res.elapsed_ms != null) {
+        setScrapTimings(prev => [...prev.slice(-99), { elapsed_ms: res.elapsed_ms, status: res.status || 'unknown' }])
+      }
       return res
     } catch (err) {
       const errState = { status: 'error', message: err.message, details: {} }
@@ -713,6 +853,7 @@ export default function Analytics() {
 
     setBulkRunning(true)
     bulkAbort.current = false
+    bulkStartTime.current = Date.now()
     setBulkProgress({ done: 0, total: rows.length })
     setOpenPanel(null)
 
@@ -737,10 +878,14 @@ export default function Analytics() {
   }
 
   // ─── Selección ───────────────────────────────────────────────────
-  // Deduplicate by product_url — mismo URL no se scrappea dos veces en bulk
+  // Deduplicate by product_url — mismo URL no se scrappea dos veces en bulk.
+  // Cupones se excluyen (requieren código específico, no se pueden scrapear).
+  const _CUPON_TIPOS = new Set(['cupón','cupon','cupones','cupónes','código','codigo'])
+  const _isCupon = (t) => { const l = (t||'').toLowerCase().trim(); return _CUPON_TIPOS.has(l) || (l.startsWith('cup') && l.length <= 12) }
   const urlSeen = new Set()
   const scrapableRows = data.filter(r => {
     if (!r.product_url) return false
+    if (_isCupon(r.tipo_promo)) return false
     if (urlSeen.has(r.product_url)) return false
     urlSeen.add(r.product_url)
     return true
@@ -798,11 +943,17 @@ export default function Analytics() {
         </div>
       </div>
 
-      {/* Browserless usage bar */}
+      {/* Browserless usage bar + progreso */}
       <BrowserlessBar
         scrapableCount={scrapableRows.length}
         verifStates={verifStates}
         currentDataKeys={currentDataKeys}
+        bulkRunning={bulkRunning}
+        bulkProgress={bulkProgress}
+        scrapTimings={scrapTimings}
+        verifOk={verifOk}
+        verifWarn={verifWarn}
+        verifErr={verifErr}
       />
 
       {/* Filters */}
@@ -999,6 +1150,7 @@ export default function Analytics() {
                         <VerifBadge
                           state={verif}
                           onClick={() => handleVerify(row)}
+                          tipoPrmo={row.tipo_promo}
                         />
                       </td>
                     </tr>

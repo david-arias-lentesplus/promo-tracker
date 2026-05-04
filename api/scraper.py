@@ -993,6 +993,304 @@ def scrape_tier_price(page, url: str, expected_pct: float, qty_max: int, debug_m
         }
 
 
+# ── Obsequios: extractor de ítems del carrito ────────────────────
+
+CART_ALL_ITEMS_CONTAINERS = [
+    '[class*="cartPage-items_container"] ul',
+    '[class*="cartPage-items"] ul',
+    '[class*="cart-items"] ul',
+    '[class*="cartItems"] ul',
+]
+
+def _extract_all_cart_items(page) -> list:
+    """
+    Extrae todos los ítems del carrito como lista de dicts.
+    Cada dict: {name, price, raw}
+    """
+    items = []
+
+    container = None
+    for sel in CART_ALL_ITEMS_CONTAINERS:
+        try:
+            c = page.query_selector(sel)
+            if c:
+                container = c
+                break
+        except Exception:
+            continue
+
+    li_els = []
+    if container:
+        try:
+            li_els = container.query_selector_all('li')
+        except Exception:
+            pass
+
+    if not li_els:
+        # fallback: all li inside cart area
+        try:
+            li_els = page.query_selector_all('[class*="cart"] li') or []
+        except Exception:
+            li_els = []
+
+    for li in li_els:
+        try:
+            txt = li.inner_text().strip()
+            if not txt or len(txt) < 3:
+                continue
+
+            # Price: look for price span inside the li
+            price = None
+            for ps in ['[class*="product-price"]', '[class*="price"]',
+                       'span[class*="Price"]', '[class*="ProductPrice"]']:
+                try:
+                    p_el = li.query_selector(ps)
+                    if p_el:
+                        p = _clean_price(p_el.inner_text())
+                        if p is not None:
+                            price = p
+                            break
+                except Exception:
+                    continue
+
+            # Product name: first non-price text line
+            lines = [l.strip() for l in txt.split('\n') if l.strip() and len(l.strip()) > 2]
+            name = ''
+            for line in lines:
+                if not re.match(r'^[\d\$\.,\s\%COP]+$', line) and len(line) > 3:
+                    name = line[:120]
+                    break
+            if not name and lines:
+                name = lines[0][:120]
+
+            items.append({'name': name, 'price': price, 'raw': txt[:300]})
+        except Exception:
+            continue
+
+    return items[:20]
+
+
+# ── Obsequios scraper ─────────────────────────────────────────────
+
+def scrape_obsequios(page, url: str, qty_max: int, debug_mode: bool = False) -> dict:
+    """
+    Verifica promociones de tipo Obsequio:
+      1. Navega al producto y llena los campos de fórmula si existen.
+      2. Ajusta la cantidad a qty_max (mínimo para activar el obsequio).
+      3. Agrega al carrito.
+      4. Lee todos los ítems del carrito — si hay >1, el extra es el obsequio.
+      5. Reporta el producto obsequio identificado.
+    """
+    steps      = []
+    screenshots = {}
+    fields_filled = {}
+
+    def log(n, msg, ok=True):
+        icon = '✓' if ok else '✗'
+        steps.append({'n': n, 'ok': ok, 'msg': f'{icon} {msg}'})
+        print(f'  [obsequios] paso {n}: {icon} {msg}')
+
+    def snap(label):
+        b64 = _snap(page, debug_mode)
+        if b64:
+            screenshots[label] = b64
+        return b64
+
+    try:
+        # ── Paso 1: Cargar página ──────────────────────────────────
+        log(1, 'Cargando página del producto…')
+        page.goto(url, wait_until='domcontentloaded', timeout=30000)
+        page.wait_for_timeout(3000)
+        log(1, f'Cargado: "{page.title()}"')
+        snap('01_producto')
+
+        # ── Paso 2: Completar campos de fórmula ───────────────────
+        log(2, 'Buscando campos de prescripción…')
+        for field_name, field_id in FORMULA_FIELDS:
+            r = _fill_field_v2(page, field_name, field_id)
+            if r['filled']:
+                fields_filled[field_name] = r['value']
+                log(2, f'{field_name} → "{r["value"]}"')
+            else:
+                log(2, f'{field_name}: {r["error"]}', ok=False)
+        snap('02_campos')
+        page.wait_for_timeout(500)
+
+        # ── Paso 3: Ajustar cantidad ──────────────────────────────
+        log(3, f'Ajustando cantidad a {qty_max}…')
+        current_qty = _get_current_qty(page)
+        if current_qty >= qty_max:
+            final_qty = current_qty
+            log(3, f'Cantidad ya correcta: {current_qty}')
+        else:
+            final_qty = _click_plus_until_qty(page, qty_max, log_fn=log)
+        snap('03_cantidad')
+
+        # ── Paso 4: Agregar al carrito ────────────────────────────
+        log(4, 'Buscando botón agregar al carrito…')
+        original_url = page.url
+        add_btn = None
+        for txt in ADD_TO_BAG_TEXTS:
+            for sp in [f'button:has-text("{txt}")', f'[role="button"]:has-text("{txt}")']:
+                try:
+                    btn = page.query_selector(sp)
+                    if btn and btn.is_visible():
+                        add_btn = btn
+                        log(4, f'Botón: "{txt}"')
+                        break
+                except Exception:
+                    continue
+            if add_btn:
+                break
+
+        if not add_btn:
+            snap('04_no_btn')
+            return {
+                'status':  'error',
+                'message': 'No se encontró el botón de agregar al carrito.',
+                'details': {'fields_filled': fields_filled, 'steps': steps,
+                            'debug': {'screenshots': screenshots, 'page_url': page.url}},
+            }
+
+        log(4, 'Haciendo click…')
+        try:
+            with page.expect_navigation(timeout=12000, wait_until='domcontentloaded'):
+                add_btn.click()
+            log(4, f'Navegación completa → {page.url}')
+        except Exception:
+            try:
+                page.wait_for_function(
+                    f"window.location.href !== {json.dumps(original_url)}", timeout=8000)
+                log(4, f'URL cambió vía SPA → {page.url}')
+            except Exception:
+                log(4, 'Sin navegación detectada', ok=False)
+
+        page.wait_for_timeout(2500)
+        snap('04_post_click')
+
+        # ── Paso 5: Ir al carrito ──────────────────────────────────
+        log(5, f'URL actual: {page.url}')
+        cart_kws = ['carrito', 'cart', 'bolsa', 'bag']
+        if not any(kw in page.url.lower() for kw in cart_kws):
+            cart_url = re.sub(r'(lentesplus\.com/\w{2})(/.*)?', r'\1/carrito', page.url)
+            if cart_url != page.url:
+                try:
+                    page.goto(cart_url, wait_until='domcontentloaded', timeout=20000)
+                    log(5, f'Navegado a carrito: {page.url}')
+                    snap('05_carrito_directo')
+                except Exception as e:
+                    log(5, f'Error navegando al carrito: {e}', ok=False)
+        else:
+            log(5, 'Ya en carrito ✓')
+
+        try:
+            page.wait_for_load_state('networkidle', timeout=10000)
+        except Exception:
+            pass
+        page.wait_for_timeout(2000)
+        snap('05_carrito')
+
+        # Verificar que el carrito no esté vacío
+        page_text = page.inner_text('body')
+        if any(ph in page_text.lower() for ph in CART_EMPTY_PHRASES):
+            log(5, 'Carrito vacío — el producto no pudo agregarse', ok=False)
+            return {
+                'status':  'error',
+                'message': 'El carrito quedó vacío después del intento. Verifica que los campos de fórmula sean válidos.',
+                'details': {'fields_filled': fields_filled, 'qty': final_qty, 'steps': steps,
+                            'debug': {'screenshots': screenshots, 'page_url': page.url}},
+            }
+
+        # ── Paso 6: Extraer todos los ítems del carrito ────────────
+        log(6, 'Extrayendo ítems del carrito…')
+        cart_items = _extract_all_cart_items(page)
+        log(6, f'{len(cart_items)} ítem(s) encontrado(s)')
+
+        details = {
+            'fields_filled': fields_filled,
+            'qty':           final_qty,
+            'cart_url':      page.url,
+            'cart_items':    cart_items,
+            'steps':         steps,
+        }
+        if debug_mode:
+            details['debug'] = {
+                'screenshots':  screenshots,
+                'page_url':     page.url,
+                'body_snippet': page_text[:500],
+            }
+
+        if not cart_items:
+            return {
+                'status':  'warning',
+                'message': 'No se pudieron leer los ítems del carrito. Activa debug para más info.',
+                'details': details,
+            }
+
+        if len(cart_items) < 2:
+            return {
+                'status':  'warning',
+                'message': (f'Solo 1 ítem en el carrito — el obsequio no se agregó automáticamente. '
+                           f'Verifica que la cantidad mínima ({qty_max}) sea la requerida por la promo.'),
+                'details': details,
+            }
+
+        # Identificar el obsequio: ítem con precio 0 o None
+        gift_items = [it for it in cart_items if not it.get('price') or it['price'] == 0]
+        main_items = [it for it in cart_items if it.get('price') and it['price'] > 0]
+
+        if not gift_items:
+            # No se puede distinguir por precio → los ítems más allá del primero son obsequios
+            main_items = cart_items[:1]
+            gift_items = cart_items[1:]
+
+        details['gift_items'] = gift_items
+        details['main_items'] = main_items
+        snap('06_carrito_final')
+
+        gift_names = [it['name'] for it in gift_items if it.get('name')]
+        return {
+            'status':  'ok',
+            'message': (f'Obsequio detectado ✓ — {len(cart_items)} productos en carrito. '
+                       f'Regalo: {", ".join(gift_names) or "ítem adicional detectado"}'),
+            'details': details,
+        }
+
+    except Exception as e:
+        import traceback
+        snap('exception')
+        return {
+            'status':  'error',
+            'message': f'Error en scraping Obsequios: {str(e)}',
+            'details': {
+                'fields_filled': fields_filled,
+                'steps':         steps,
+                'traceback':     traceback.format_exc()[-800:],
+                'debug':         {'screenshots': screenshots},
+            },
+        }
+
+
+# ── Tipo helpers ──────────────────────────────────────────────────
+
+_TIPOS_CUPON = frozenset({
+    'cupón', 'cupon', 'cupones', 'cupónes',
+    'código', 'codigo', 'código descuento', 'cupon descuento',
+})
+
+def _is_cupon(tipo: str) -> bool:
+    t = tipo.lower().strip()
+    return t in _TIPOS_CUPON or (t.startswith('cup') and len(t) <= 12)
+
+_TIPOS_OBSEQUIO = frozenset({
+    'obsequio', 'obsequios', 'regalo', 'regalos', 'gift', 'gifts',
+    'promoción obsequio', 'promo obsequio', 'obsequio promo',
+})
+
+def _is_obsequio(tipo: str) -> bool:
+    return tipo.lower().strip() in _TIPOS_OBSEQUIO
+
+
 # ── Dispatch: Playwright local o Browserless.io remoto ───────────
 #
 # El modo se determina por la variable de entorno VERCEL que Vercel
@@ -1133,6 +1431,8 @@ def _run_with_playwright(tipo_promo: str, url: str,
             result = scrape_precio_tachado(page, url, expected_pct)
         elif tipo in ('tier price', 'tier'):
             result = scrape_tier_price(page, url, expected_pct, qty_max, debug_mode=debug_mode)
+        elif _is_obsequio(tipo_promo):
+            result = scrape_obsequios(page, url, qty_max, debug_mode=debug_mode)
         else:
             result = {
                 'status':  'pending',
@@ -1413,6 +1713,20 @@ class handler(BaseHTTPRequestHandler):
             return json_response(self, 400, {'status': 'error', 'message': 'Campo url requerido'})
         if not tipo_promo:
             return json_response(self, 400, {'status': 'error', 'message': 'Campo tipo_promo requerido'})
+
+        # ── Cupones: omitir sin scrapear ──────────────────────────
+        if _is_cupon(tipo_promo):
+            return json_response(self, 200, {
+                'status':     'skipped',
+                'message':    (f'Tipo "{tipo_promo}" omitido — los cupones requieren un código '
+                              'específico que generalmente no está disponible para scraping automático.'),
+                'details':    {'tipo_promo': tipo_promo},
+                'engine':     'none',
+                'tipo':       tipo_promo,
+                'elapsed_ms': 0,
+                'url':        url,
+                'sku':        sku,
+            })
 
         t0 = time.time()
         try:
