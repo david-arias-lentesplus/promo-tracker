@@ -5,134 +5,93 @@
       "src": "api/login.py",
       "use": "@vercel/python",
       "config": {
-        "includeFiles": [
-          "api/_*.py",
-          "data/users.json"
-        ]
+        "includeFiles": ["api/_*.py", "data/users.json"]
       }
     },
     {
       "src": "api/raw_data.py",
       "use": "@vercel/python",
       "config": {
-        "includeFiles": [
-          "api/_*.py",
-          "data/url_sku_images.csv",
-          "data/sku_use_data.csv"
-        ]
+        "includeFiles": ["api/_*.py", "data/url_sku_images.csv", "data/sku_use_data.csv"]
       }
     },
     {
       "src": "api/stats.py",
       "use": "@vercel/python",
       "config": {
-        "includeFiles": [
-          "api/_*.py",
-          "data/url_sku_images.csv",
-          "data/sku_use_data.csv"
-        ]
+        "includeFiles": ["api/_*.py", "data/url_sku_images.csv", "data/sku_use_data.csv"]
       }
     },
     {
       "src": "api/hs_info.py",
       "use": "@vercel/python",
       "config": {
-        "includeFiles": [
-          "api/_*.py",
-          "data/url_sku_images.csv",
-          "data/sku_use_data.csv"
-        ]
+        "includeFiles": ["api/_*.py", "data/url_sku_images.csv", "data/sku_use_data.csv"]
       }
     },
     {
       "src": "api/campaigns.py",
       "use": "@vercel/python",
       "config": {
-        "includeFiles": [
-          "api/_*.py",
-          "data/url_sku_images.csv",
-          "data/sku_use_data.csv"
-        ]
+        "includeFiles": ["api/_*.py", "data/url_sku_images.csv", "data/sku_use_data.csv"]
       }
     },
     {
       "src": "api/users.py",
       "use": "@vercel/python",
       "config": {
-        "includeFiles": [
-          "api/_*.py",
-          "data/users.json"
-        ]
+        "includeFiles": ["api/_*.py", "data/users.json"]
       }
     },
     {
       "src": "api/me.py",
       "use": "@vercel/python",
       "config": {
-        "includeFiles": [
-          "api/_*.py",
-          "data/users.json"
-        ]
+        "includeFiles": ["api/_*.py", "data/users.json"]
       }
     },
     {
       "src": "api/notifications.py",
       "use": "@vercel/python",
       "config": {
-        "includeFiles": [
-          "api/_*.py",
-          "data/url_sku_images.csv",
-          "data/sku_use_data.csv"
-        ]
+        "includeFiles": ["api/_*.py", "data/url_sku_images.csv", "data/sku_use_data.csv"]
       }
     },
     {
       "src": "api/analytics.py",
       "use": "@vercel/python",
       "config": {
-        "includeFiles": [
-          "api/_*.py",
-          "data/url_sku_images.csv",
-          "data/sku_use_data.csv"
-        ]
+        "includeFiles": ["api/_*.py", "data/url_sku_images.csv", "data/sku_use_data.csv"]
       }
     },
     {
       "src": "api/scraper.py",
       "use": "@vercel/python",
       "config": {
-        "includeFiles": [
-          "api/_*.py",
-          "data/scraper_stats.json"
-        ]
+        "includeFiles": ["api/_*.py", "data/scraper_stats.json"]
       }
     },
     {
       "src": "api/scraper_stats.py",
       "use": "@vercel/python",
       "config": {
-        "includeFiles": [
-          "api/_*.py",
-          "data/scraper_stats.json"
-        ]
+        "includeFiles": ["api/_*.py", "data/scraper_stats.json"]
       }
     },
-,
-,
-    {
-      "src": "api/promo_orders.py",
-      "use": "@vercel/python",
-      "config": { "includeFiles": ["api/_*.py"] }
-    }
     {
       "src": "api/promo_performance.py",
       "use": "@vercel/python",
       "config": {
-        "includeFiles": [
-          "api/_*.py"
-        ]
+        "includeFiles": ["api/_*.py"]
       }
-    }
+    },
+    {
+      "src": "api/promo_orders.py",
+      "use": "@vercel/python",
+      "config": {
+        "includeFiles": ["api/_*.py"]
+      }
+    },
     {
       "src": "package.json",
       "use": "@vercel/static-build",
@@ -159,18 +118,9 @@
     {
       "source": "/api/(.*)",
       "headers": [
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "*"
-        },
-        {
-          "key": "Access-Control-Allow-Methods",
-          "value": "GET, POST, OPTIONS"
-        },
-        {
-          "key": "Access-Control-Allow-Headers",
-          "value": "Authorization, Content-Type"
-        }
+        { "key": "Access-Control-Allow-Origin",  "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Authorization, Content-Type" }
       ]
     }
   ],
