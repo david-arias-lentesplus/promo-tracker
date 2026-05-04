@@ -995,85 +995,106 @@ def scrape_tier_price(page, url: str, expected_pct: float, qty_max: int, debug_m
 
 # ── Dispatch: Playwright local o Browserless.io remoto ───────────
 #
-# En Vercel no hay Chromium local. Usamos Browserless.io como motor
-# remoto: Playwright se conecta vía CDP a su API y todo el código
-# de scraping funciona sin cambios.
+# El modo se determina por la variable de entorno VERCEL que Vercel
+# inyecta automáticamente en todas sus funciones serverless.
 #
-# Config Vercel: BROWSERLESS_TOKEN = tu token de browserless.io
-# Free tier: 6 h/mes   Paid: desde $49/mes
+#   ENTORNO LOCAL  (VERCEL no definida):
+#     → Siempre usa Chromium local vía Playwright.
+#     → Nunca toca Browserless → scraps ilimitados sin consumir cuota.
+#
+#   ENTORNO VERCEL (VERCEL=1):
+#     → Siempre usa Browserless.io vía CDP.
+#     → Requiere BROWSERLESS_TOKEN en Vercel → Settings → Env Vars.
+#     → Cada scrap exitoso se registra en scraper_stats.json.
+#
 # ─────────────────────────────────────────────────────────────────
+
+def _is_vercel() -> bool:
+    """True cuando corremos dentro de una función serverless de Vercel."""
+    return bool(os.environ.get('VERCEL', '').strip())
+
 
 def _get_browser_and_ctx():
     """
     Retorna (pw_ctx, browser, engine_label) o lanza Exception.
-    Prioridad:
-      1. Chromium local (desarrollo)
-      2. Browserless.io via CDP (Vercel / producción)
+
+    Modo local  → Chromium local (headless)
+    Modo Vercel → Browserless.io vía CDP (3 reintentos)
     """
     from playwright.sync_api import sync_playwright
 
     pw_ctx = sync_playwright().start()
 
-    # ── 1. Intentar Chromium local ──────────────────────────────
-    local_ok = False
+    # ── MODO VERCEL: Browserless.io remoto ──────────────────────
+    if _is_vercel():
+        bl_token = os.environ.get('BROWSERLESS_TOKEN', '').strip()
+        if not bl_token:
+            pw_ctx.stop()
+            raise RuntimeError(
+                'Entorno Vercel detectado pero BROWSERLESS_TOKEN no está configurado. '
+                'Agrega BROWSERLESS_TOKEN en Vercel → Settings → Environment Variables.'
+            )
+
+        cdp_url = f"wss://chrome.browserless.io?token={bl_token}"
+        print('  [scraper] Modo Vercel → conectando a Browserless.io…')
+
+        last_err = None
+        for attempt in range(3):
+            try:
+                browser = pw_ctx.chromium.connect_over_cdp(cdp_url, timeout=30000)
+                print(f'  [scraper] Browserless conectado (intento {attempt + 1})')
+                return pw_ctx, browser, 'browserless'
+            except Exception as e:
+                last_err = e
+                print(f'  [scraper] Intento {attempt + 1} fallido: {e}')
+                if attempt < 2:
+                    time.sleep(3)
+
+        pw_ctx.stop()
+        raise RuntimeError(f'Browserless no disponible después de 3 intentos: {last_err}')
+
+    # ── MODO LOCAL: Chromium local ───────────────────────────────
+    print('  [scraper] Modo local → lanzando Chromium local…')
     try:
         exe = pw_ctx.chromium.executable_path
-        local_ok = bool(exe) and os.path.exists(exe)
-    except Exception:
-        pass
-
-    if local_ok:
-        browser = pw_ctx.chromium.launch(
-            headless=True,
-            args=['--no-sandbox', '--disable-dev-shm-usage',
-                  '--disable-gpu', '--single-process'],
-        )
-        return pw_ctx, browser, 'playwright_local'
-
-    # ── 2. Browserless.io remoto ────────────────────────────────
-    bl_token = os.environ.get('BROWSERLESS_TOKEN', '').strip()
-    if not bl_token:
+        if not (exe and os.path.exists(exe)):
+            pw_ctx.stop()
+            raise RuntimeError(
+                'Chromium local no encontrado. '
+                'Ejecuta: playwright install chromium'
+            )
+    except RuntimeError:
+        raise
+    except Exception as e:
         pw_ctx.stop()
-        raise RuntimeError(
-            'Chromium local no disponible y BROWSERLESS_TOKEN no configurado. '
-            'Agrega BROWSERLESS_TOKEN en Vercel → Settings → Environment Variables.'
-        )
+        raise RuntimeError(f'Playwright/Chromium no disponible localmente: {e}')
 
-    # Timeout 90 s para tier-price (múltiples pasos)
-    # Sin timeout= en la URL (usa el default del plan).
-    # El timeout de establecimiento de conexión va como parámetro de Playwright (ms).
-    cdp_url = f"wss://chrome.browserless.io?token={bl_token}"
-    print(f'  [scraper] Conectando a Browserless.io (intento)...')
-
-    last_err = None
-    for attempt in range(3):
-        try:
-            browser = pw_ctx.chromium.connect_over_cdp(cdp_url, timeout=30000)
-            print(f'  [scraper] Browserless conectado en intento {attempt + 1}')
-            return pw_ctx, browser, 'browserless'
-        except Exception as e:
-            last_err = e
-            print(f'  [scraper] Intento {attempt + 1} fallido: {e}')
-            if attempt < 2:
-                time.sleep(3)
-
-    pw_ctx.stop()
-    raise RuntimeError(f'Browserless no disponible después de 3 intentos: {last_err}')
+    browser = pw_ctx.chromium.launch(
+        headless=True,
+        args=['--no-sandbox', '--disable-dev-shm-usage',
+              '--disable-gpu', '--single-process'],
+    )
+    return pw_ctx, browser, 'playwright_local'
 
 
 def _playwright_available() -> bool:
-    """True si hay Chromium local O si BROWSERLESS_TOKEN está configurado."""
-    # Chromium local
+    """
+    True si el motor de scraping está disponible en este entorno.
+
+    Vercel → requiere BROWSERLESS_TOKEN.
+    Local  → requiere Chromium instalado.
+    """
+    if _is_vercel():
+        return bool(os.environ.get('BROWSERLESS_TOKEN', '').strip())
+
+    # Local: verificar que Chromium existe
     try:
         from playwright.sync_api import sync_playwright
         with sync_playwright() as pw:
             exe = pw.chromium.executable_path
-        if exe and os.path.exists(exe):
-            return True
+        return bool(exe and os.path.exists(exe))
     except Exception:
-        pass
-    # Browserless remoto
-    return bool(os.environ.get('BROWSERLESS_TOKEN', '').strip())
+        return False
 
 
 def _run_with_playwright(tipo_promo: str, url: str,
