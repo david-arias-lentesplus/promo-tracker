@@ -104,7 +104,7 @@ function OrderModal({ order, onClose }) {
     let cancelled = false
     async function load() {
       try {
-        const res = await apiRequest(`/promo_orders?mode=products&order_number=${encodeURIComponent(order.order_number)}`)
+        const res = await apiRequest(`/promo?mode=products&order_number=${encodeURIComponent(order.order_number)}`)
         if (!cancelled) {
           if (res.status !== 'ok') throw new Error(res.message)
           setProducts(res.data || [])
@@ -227,7 +227,7 @@ function CouponRow({ row, dateFrom, dateTo, country }) {
           ...(dateTo   ? { date_to:   dateTo   } : {}),
           ...(country  ? { country }              : {}),
         })
-        const res = await apiRequest(`/promo_orders?${params}`)
+        const res = await apiRequest(`/promo?${params}`)
         if (res.status !== 'ok') throw new Error(res.message)
         setOrders(res.data || [])
         setLoaded(true)
@@ -368,7 +368,7 @@ export default function PromoPerformance() {
       if (dateFrom) p.set('date_from', dateFrom)
       if (dateTo)   p.set('date_to',   dateTo)
       if (country)  p.set('country',   country)
-      const res = await apiRequest(`/promo_performance?${p}`)
+      const res = await apiRequest(`/promo?mode=performance&${p}`)
       if (res.status !== 'ok') throw new Error(res.message || 'Error desconocido')
       setRows(res.data || [])
     } catch(e) {
