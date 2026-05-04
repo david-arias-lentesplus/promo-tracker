@@ -134,18 +134,17 @@ function startVite() {
   const npxBin = resolveBin('npx')
   log('Lanzando Vite con npx:', npxBin)
 
-  const viteArgs = [
-    'vite',
-    '--port',     String(VITE_PORT),
-    '--host',     'localhost',
-    '--cacheDir', cacheDir,
-  ]
+  // --cacheDir no existe como flag CLI en Vite; se pasa por env var
+  // y vite.config.js lo lee con: cacheDir: process.env.VITE_CACHE_DIR || 'node_modules/.vite'
+  const viteEnv = { ...CHILD_ENV, FORCE_COLOR: '0', VITE_CACHE_DIR: cacheDir }
+
+  const viteArgs = ['vite', '--port', String(VITE_PORT), '--host', 'localhost']
 
   viteProc = spawn(npxBin, viteArgs, {
     cwd:   ROOT,
     stdio: 'pipe',
     shell: false,
-    env:   { ...CHILD_ENV, FORCE_COLOR: '0' },
+    env:   viteEnv,
   })
   viteProc.stdout.on('data', d => log('[vite]', String(d).trim()))
   viteProc.stderr.on('data', d => log('[vite]', String(d).trim()))
@@ -156,7 +155,7 @@ function startVite() {
       cwd:   ROOT,
       stdio: 'pipe',
       shell: true,
-      env:   { ...CHILD_ENV, FORCE_COLOR: '0', VITE_CACHE_DIR: cacheDir },
+      env:   viteEnv,
     })
     viteProc.stdout.on('data', d => log('[vite-sh]', String(d).trim()))
     viteProc.stderr.on('data', d => log('[vite-sh]', String(d).trim()))

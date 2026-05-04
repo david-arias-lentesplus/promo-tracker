@@ -21,6 +21,10 @@ const _buildTime = new Date().toISOString().slice(0, 16).replace('T', ' ') + ' U
 export default defineConfig({
   plugins: [react()],
 
+  // Cuando Electron lanza Vite, inyecta VITE_CACHE_DIR=/tmp/... para evitar
+  // conflictos de permisos con node_modules/.vite creado desde el terminal.
+  cacheDir: process.env.VITE_CACHE_DIR || 'node_modules/.vite',
+
   // Constantes inyectadas en el bundle (reemplazadas en build time)
   define: {
     __APP_VERSION__:    JSON.stringify(_commitSha),
