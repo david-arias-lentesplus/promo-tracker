@@ -2,7 +2,7 @@
  * 📄 /src/pages/Analytics.jsx
  * Auditoría de promociones — lista paginada + verificación por scraping
  */
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { apiRequest } from '@utils/api'
 import { useFilters }  from '@context/FiltersContext'
 
@@ -18,6 +18,8 @@ const IconChevron     = ({ s=14, dir='left' }) => <svg width={s} height={s} view
 const IconCheckSquare = ({ s=15 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
 const IconSquare      = ({ s=15 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>
 const IconMinus       = ({ s=15 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+const IconZap         = ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+const IconRefresh     = ({ s=13 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
 
 // ─── Helpers ────────────────────────────────────────────────────────
 function fmtDate(iso) {
@@ -438,6 +440,172 @@ function FilterBar({ meta, filters, onChange }) {
   )
 }
 
+// ─── Browserless Usage Bar ───────────────────────────────────────────
+// Muestra consumo mensual de Browserless + simulación de costo en la vista actual.
+// Solo visible para admins (el endpoint devuelve 403 para no-admins → se oculta).
+function BrowserlessBar({ scrapableCount, verifStates, currentDataKeys }) {
+  const [stats,   setStats]   = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  const fetchStats = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await apiRequest('/scraper_stats')
+      setStats(res.stats || null)
+    } catch {
+      setStats(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchStats() }, [fetchStats])
+
+  if (loading) return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-3 mb-4 flex items-center gap-2 text-xs text-gray-400">
+      <div className="w-3.5 h-3.5 border-2 border-gray-300 border-t-transparent rounded-full animate-spin"/>
+      Cargando consumo Browserless…
+    </div>
+  )
+  if (!stats) return null   // no-admin o sin datos → no mostrar
+
+  const monthKey   = new Date().toISOString().slice(0, 7)               // "2026-05"
+  const monthData  = stats.monthly?.[monthKey] || { calls: 0, units_used: 0, history: [] }
+  const plan       = stats.plan || { units_per_month: 1000, reset_day: 1 }
+  const totalUnits = plan.units_per_month
+  const usedUnits  = monthData.units_used || 0
+  const usedCalls  = monthData.calls      || 0
+  const pct        = Math.min(100, (usedUnits / totalUnits) * 100)
+
+  // Avg unidades por scrap (de historial; si no hay datos, asumimos 1.5)
+  const avgUnitsPerScrap = usedCalls > 0 ? (usedUnits / usedCalls) : 1.5
+
+  // Scraps realizados en la sesión actual (solo los de la vista corriente y con engine browserless)
+  let sessionUnits   = 0
+  let sessionScraps  = 0
+  let sessionLocal   = 0
+  Object.entries(verifStates).forEach(([k, v]) => {
+    if (!currentDataKeys.has(k) || v.loading) return
+    const eng = (v.engine || '').toLowerCase()
+    if (eng.includes('browserless')) {
+      sessionScraps++
+      sessionUnits += Math.max(1, Math.ceil((v.elapsed_ms || 30000) / 30000))
+    } else if (eng.includes('local') || eng.includes('playwright')) {
+      sessionLocal++
+    }
+  })
+
+  // Pendientes en la vista actual
+  const verifiedInView = Object.keys(verifStates).filter(k => currentDataKeys.has(k) && !verifStates[k].loading).length
+  const pendingInView  = Math.max(0, scrapableCount - verifiedInView)
+  const estPending     = Math.round(pendingInView * avgUnitsPerScrap)
+  const remaining      = Math.max(0, totalUnits - usedUnits)
+
+  // Color de la barra
+  const barColor = pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-400' : 'bg-[#0000E1]'
+
+  // Mes en español
+  const monthNames = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+  const [yy, mm]  = monthKey.split('-')
+  const monthLabel = `${monthNames[parseInt(mm) - 1]} ${yy}`
+
+  // Próximo reset
+  const now       = new Date()
+  const resetDate = new Date(now.getFullYear(), now.getMonth() + 1, plan.reset_day)
+  const daysLeft  = Math.ceil((resetDate - now) / 86400000)
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-4 mb-4">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded-lg bg-[#0000E1]/10 flex items-center justify-center">
+            <IconZap s={13} className="text-[#0000E1]" />
+          </div>
+          <span className="text-xs font-bold text-gray-700">Consumo Browserless</span>
+          <span className="text-[10px] text-gray-400 capitalize">{monthLabel}</span>
+          {pct >= 80 && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700">
+              {pct >= 90 ? '⚠ Cuota crítica' : '⚠ Cuota alta'}
+            </span>
+          )}
+        </div>
+        <button onClick={fetchStats}
+          className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-gray-600 transition-colors">
+          <IconRefresh s={11}/> Actualizar
+        </button>
+      </div>
+
+      {/* Progress bar */}
+      <div className="mb-3">
+        <div className="flex justify-between text-[11px] text-gray-500 mb-1">
+          <span><strong className="text-gray-800 text-xs">{usedUnits}</strong> unidades usadas</span>
+          <span>{remaining} restantes de {totalUnits.toLocaleString()} · reset en {daysLeft}d</span>
+        </div>
+        <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+          <div className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+               style={{ width: `${pct}%` }} />
+        </div>
+        <div className="flex justify-between text-[10px] text-gray-400 mt-0.5">
+          <span>{usedCalls} scraps realizados este mes</span>
+          <span>{pct.toFixed(1)}%</span>
+        </div>
+      </div>
+
+      {/* KPI row */}
+      <div className="grid grid-cols-4 gap-3">
+
+        {/* Vista actual */}
+        <div className="bg-gray-50 rounded-xl px-3 py-2.5">
+          <p className="text-[10px] text-gray-400 font-medium mb-0.5">Vista actual</p>
+          <p className="text-sm font-black text-gray-800">
+            {verifiedInView}<span className="text-gray-400 font-normal text-xs">/{scrapableCount}</span>
+          </p>
+          <p className="text-[10px] text-gray-400">
+            {scrapableCount > 0 ? Math.round(verifiedInView / scrapableCount * 100) : 0}% verificados
+          </p>
+        </div>
+
+        {/* Costo sesión */}
+        <div className={`rounded-xl px-3 py-2.5 ${sessionLocal > 0 ? 'bg-emerald-50' : 'bg-blue-50'}`}>
+          <p className="text-[10px] text-gray-400 font-medium mb-0.5">Esta sesión</p>
+          {sessionLocal > 0 ? (
+            <>
+              <p className="text-sm font-black text-emerald-700">{sessionLocal} local{sessionLocal > 1 ? 'es' : ''}</p>
+              <p className="text-[10px] text-emerald-600">0 unidades · dev mode</p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-black text-[#0000E1]">{sessionUnits} u</p>
+              <p className="text-[10px] text-blue-600">{sessionScraps} scrap{sessionScraps !== 1 ? 's' : ''} · browserless</p>
+            </>
+          )}
+        </div>
+
+        {/* Estimado pendiente */}
+        <div className="bg-amber-50 rounded-xl px-3 py-2.5">
+          <p className="text-[10px] text-gray-400 font-medium mb-0.5">Pendiente (vista)</p>
+          <p className="text-sm font-black text-amber-700">~{estPending} u</p>
+          <p className="text-[10px] text-amber-600">{pendingInView} scraps × {avgUnitsPerScrap.toFixed(1)} avg</p>
+        </div>
+
+        {/* Alcance restante */}
+        <div className={`rounded-xl px-3 py-2.5 ${remaining < estPending ? 'bg-red-50' : 'bg-gray-50'}`}>
+          <p className="text-[10px] text-gray-400 font-medium mb-0.5">Presupuesto restante</p>
+          <p className={`text-sm font-black ${remaining < estPending ? 'text-red-600' : 'text-gray-800'}`}>
+            {remaining} u
+          </p>
+          <p className={`text-[10px] ${remaining < estPending ? 'text-red-500' : 'text-gray-400'}`}>
+            {remaining < estPending
+              ? `⚠ faltan ~${estPending - remaining} u`
+              : `≈ ${Math.floor(remaining / avgUnitsPerScrap)} scraps más`}
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────
 export default function Analytics() {
   const { country, dateFrom, dateTo } = useFilters()
@@ -601,7 +769,11 @@ export default function Analytics() {
   const totalPages = meta.total_pages || 1
   const page       = filters.page || 1
 
-  const verifList = Object.values(verifStates).filter(v => !v.loading)
+  // Solo contamos los resultados de las filas visibles en el país/filtro actual
+  const currentDataKeys = useMemo(() => new Set(data.map(rowKey)), [data])
+  const verifList = Object.entries(verifStates)
+    .filter(([k, v]) => currentDataKeys.has(k) && !v.loading)
+    .map(([, v]) => v)
   const verifOk   = verifList.filter(v => v.status === 'ok').length
   const verifWarn = verifList.filter(v => v.status === 'warning').length
   const verifErr  = verifList.filter(v => v.status === 'error').length
@@ -625,6 +797,13 @@ export default function Analytics() {
           {verifErr  > 0 && <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-100 text-red-700 text-xs font-bold"><IconX s={12}/>{verifErr} Error</span>}
         </div>
       </div>
+
+      {/* Browserless usage bar */}
+      <BrowserlessBar
+        scrapableCount={scrapableRows.length}
+        verifStates={verifStates}
+        currentDataKeys={currentDataKeys}
+      />
 
       {/* Filters */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-4">
