@@ -66,86 +66,59 @@ ORDER BY name
 
 # ── MCP helpers ───────────────────────────────────────────────
 # ── MCP session cache ────────────────────────────────────────────────────────
-_mcp_session = {'endpoint': None, 'ts': 0}
+_mcp_session = {'session_id': None, 'ts': 0}
 _SESSION_TTL  = 25 * 60   # 25 min
 
 
-def _sse_get_endpoint():
-    """
-    Open the MCP SSE stream with http.client (true streaming), read line-by-line
-    until we find the 'endpoint' event, return the full POST URL with api_key.
-    Returns None if the server rejects (bad key / unavailable).
-    """
+def _mcp_init():
+    """POST initialize to get mcp-session-id header from the server."""
     import http.client as _hc
-    parsed  = urlparse(_MCP_URL)
-    host    = parsed.netloc
-    path    = f'{parsed.path}?api_key={_MCP_KEY}'
-    base    = f'{parsed.scheme}://{parsed.netloc}'
+    from urllib.parse import urlparse as _up
+    parsed = _up(_MCP_URL)
+    host   = parsed.netloc
+
+    payload = json.dumps({
+        'jsonrpc': '2.0', 'id': 0, 'method': 'initialize',
+        'params': {
+            'protocolVersion': '2024-11-05',
+            'capabilities':    {},
+            'clientInfo':      {'name': 'livo-dashboard', 'version': '1.0'},
+        },
+    }).encode()
 
     try:
         conn = (_hc.HTTPSConnection(host, timeout=15, context=_SSL_CTX)
                 if parsed.scheme == 'https' else _hc.HTTPConnection(host, timeout=15))
-        conn.request('GET', path,
-                     headers={'Accept': 'text/event-stream', 'Cache-Control': 'no-cache',
+        conn.request('POST', f'{parsed.path}?api_key={_MCP_KEY}', body=payload,
+                     headers={'Content-Type': 'application/json',
+                               'Accept': 'application/json, text/event-stream',
                                'Connection': 'close'})
         resp = conn.getresponse()
-
         if resp.status not in (200, 201):
             conn.close()
-            return None          # bad API key or server error
-
-        buf        = ''
-        event_type = None
-
-        for _ in range(400):    # read up to ~100 KB in 256-byte chunks
-            try:
-                chunk = resp.read(256)
-            except Exception:
+            return None
+        sid = None
+        for hdr, val in resp.getheaders():
+            if hdr.lower() == 'mcp-session-id':
+                sid = val
                 break
-            if not chunk:
-                break
-            buf += chunk.decode('utf-8', errors='replace')
-
-            while '\n' in buf:
-                line, buf = buf.split('\n', 1)
-                line = line.rstrip('\r')
-
-                if line.startswith('event:'):
-                    event_type = line[6:].strip()
-                elif line.startswith('data:'):
-                    data = line[5:].strip()
-                    if event_type == 'endpoint' or 'sessionId' in data or '/messages' in data:
-                        conn.close()
-                        if data.startswith('http'):
-                            return data
-                        if data.startswith('/'):
-                            ep  = f'{base}{data}'
-                            sep = '&' if '?' in ep else '?'
-                            if 'api_key=' not in ep:
-                                ep = f'{ep}{sep}api_key={_MCP_KEY}'
-                            return ep
-                elif line == '':
-                    event_type = None   # blank line = end of SSE event block
-
+        resp.read()
         conn.close()
+        return sid
     except Exception:
-        pass
-    return None
+        return None
 
 
 def _mcp_call(sql):
-    """Execute SQL via MCP with automatic SSE session establishment + retry."""
+    """Execute SQL via MCP: initialize to get session ID, then POST tools/call."""
     global _mcp_session
 
     now = time.time()
-    if not (_mcp_session['endpoint'] and (now - _mcp_session['ts']) < _SESSION_TTL):
-        ep = _sse_get_endpoint()
-        _mcp_session = {
-            'endpoint': ep or f'{_MCP_URL}?api_key={_MCP_KEY}',
-            'ts': now,
-        }
+    if not (_mcp_session['session_id'] and (now - _mcp_session['ts']) < _SESSION_TTL):
+        sid = _mcp_init()
+        _mcp_session = {'session_id': sid, 'ts': now}
 
-    endpoint = _mcp_session['endpoint']
+    session_id = _mcp_session['session_id']
 
     payload = json.dumps({
         'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
@@ -155,38 +128,39 @@ def _mcp_call(sql):
         },
     }).encode()
 
-    def _post(ep):
+    def _do_post(sid):
+        hdrs = {
+            'Content-Type': 'application/json',
+            'Accept':       'application/json, text/event-stream',
+        }
+        if sid:
+            hdrs['Mcp-Session-Id'] = sid
         req = urllib.request.Request(
-            ep, data=payload, method='POST',
-            headers={'Content-Type': 'application/json',
-                     'Accept':       'application/json, text/event-stream'},
+            f'{_MCP_URL}?api_key={_MCP_KEY}',
+            data=payload, method='POST', headers=hdrs,
         )
         with urllib.request.urlopen(req, timeout=45, context=_SSL_CTX) as r:
             return r.read()
 
-    # First attempt
     try:
-        raw = _post(endpoint)
+        raw = _do_post(session_id)
     except urllib.error.HTTPError as e:
-        if e.code in (400, 401, 403, 404):
-            _mcp_session['endpoint'] = None
-            ep  = _sse_get_endpoint() or f'{_MCP_URL}?api_key={_MCP_KEY}'
-            _mcp_session = {'endpoint': ep, 'ts': time.time()}
-            raw = _post(ep)
+        if e.code in (400, 401, 403):
+            sid = _mcp_init()
+            _mcp_session = {'session_id': sid, 'ts': time.time()}
+            raw = _do_post(sid)
         else:
             raise
 
     rpc = _parse_sse(raw)
 
-    # Retry once on session-related JSON-RPC error
     if 'error' in rpc:
         err = rpc['error']
         msg = str(err.get('message', '') if isinstance(err, dict) else err)
         if 'session' in msg.lower() or 'bad request' in msg.lower():
-            _mcp_session['endpoint'] = None
-            ep  = _sse_get_endpoint() or f'{_MCP_URL}?api_key={_MCP_KEY}'
-            _mcp_session = {'endpoint': ep, 'ts': time.time()}
-            raw = _post(ep)
+            sid = _mcp_init()
+            _mcp_session = {'session_id': sid, 'ts': time.time()}
+            raw = _do_post(sid)
             rpc = _parse_sse(raw)
         if 'error' in rpc:
             raise ValueError(str(rpc['error']))
@@ -201,119 +175,6 @@ def _mcp_call(sql):
         return []
     return _rows_from_text(content[0].get('text', '') if isinstance(content, list) else '')
 
-
-def _get_session_endpoint():
-    """GET the MCP SSE URL, parse the 'endpoint' event, return the POST URL."""
-    parsed  = urlparse(_MCP_URL)
-    base    = f'{parsed.scheme}://{parsed.netloc}'
-    sse_url = f'{_MCP_URL}?api_key={_MCP_KEY}'
-
-    req = urllib.request.Request(
-        sse_url, method='GET',
-        headers={
-            'Accept':        'text/event-stream',
-            'Cache-Control': 'no-cache',
-        },
-    )
-    buf = b''
-    try:
-        with urllib.request.urlopen(req, timeout=12, context=_SSL_CTX) as r:
-            # Read up to 8 KB — enough to capture the endpoint event
-            while len(buf) < 8192:
-                chunk = r.read(512)
-                if not chunk:
-                    break
-                buf += chunk
-                # Stop as soon as we see a sessionId
-                if b'sessionId' in buf or b'/messages' in buf:
-                    break
-    except Exception:
-        return sse_url  # fallback: direct POST (old behaviour)
-
-    text = buf.decode('utf-8', errors='replace')
-    # SSE lines: "data: /metabase/mcp/messages?sessionId=abc123"
-    for line in text.splitlines():
-        line = line.strip()
-        if line.startswith('data:'):
-            data = line[5:].strip()
-            if 'sessionId' in data or '/messages' in data:
-                if data.startswith('http'):
-                    ep = data
-                elif data.startswith('/'):
-                    ep = f'{base}{data}'
-                    if 'api_key=' not in ep:
-                        sep = '&' if '?' in ep else '?'
-                        ep += f'{sep}api_key={_MCP_KEY}'
-                else:
-                    continue
-                return ep
-
-    return sse_url  # fallback
-
-
-def _mcp_call(sql):
-    """Execute SQL via MCP with automatic session establishment + retry."""
-    global _mcp_session
-
-    # Use cached endpoint if still fresh
-    now = time.time()
-    if _mcp_session['endpoint'] and (now - _mcp_session['ts']) < _SESSION_TTL:
-        endpoint = _mcp_session['endpoint']
-    else:
-        endpoint = _get_session_endpoint()
-        _mcp_session = {'endpoint': endpoint, 'ts': now}
-
-    def _do_call(ep):
-        payload = json.dumps({
-            'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
-            'params': {
-                'name':      'execute',
-                'arguments': {'database_id': _DWH_ID, 'query': sql, 'row_limit': 500},
-            },
-        }).encode()
-        req = urllib.request.Request(
-            ep, data=payload, method='POST',
-            headers={
-                'Content-Type': 'application/json',
-                'Accept':       'application/json, text/event-stream',
-            },
-        )
-        with urllib.request.urlopen(req, timeout=45, context=_SSL_CTX) as r:
-            return r.read()
-
-    try:
-        raw = _do_call(endpoint)
-    except urllib.error.HTTPError as e:
-        if e.code in (400, 401, 403):
-            # Session probably expired — refresh and retry once
-            endpoint = _get_session_endpoint()
-            _mcp_session = {'endpoint': endpoint, 'ts': time.time()}
-            raw = _do_call(endpoint)
-        else:
-            raise
-
-    rpc = _parse_sse(raw)
-
-    # Retry once if session-related error in JSON-RPC body
-    if 'error' in rpc:
-        err_msg = str(rpc['error'].get('message', ''))
-        if 'session' in err_msg.lower() or 'Bad Request' in err_msg:
-            endpoint = _get_session_endpoint()
-            _mcp_session = {'endpoint': endpoint, 'ts': time.time()}
-            raw  = _do_call(endpoint)
-            rpc  = _parse_sse(raw)
-        if 'error' in rpc:
-            raise ValueError(str(rpc['error']))
-
-    result = rpc.get('result', {})
-    if result.get('isError'):
-        content = result.get('content', [])
-        raise ValueError(content[0].get('text', 'MCP error') if content else 'MCP error')
-
-    content = result.get('content', [])
-    if not content:
-        return []
-    return _rows_from_text(content[0].get('text', '') if isinstance(content, list) else '')
 
 def _parse_sse(raw_bytes):
     text = raw_bytes.decode('utf-8', errors='replace')

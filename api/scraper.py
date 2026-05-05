@@ -1692,6 +1692,18 @@ class handler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Headers', 'Authorization, Content-Type')
         self.end_headers()
 
+
+    def do_GET(self):
+        """GET /api/scraper_stats  or  /api/scraper?mode=stats — Browserless usage stats (admin only)."""
+        is_admin, msg, _ = validate_admin(dict(self.headers))
+        if not is_admin:
+            return json_response(self, 403, {'status': 'error', 'message': msg})
+        try:
+            stats = load_scraper_stats()
+            return json_response(self, 200, {'status': 'ok', 'stats': stats})
+        except Exception as e:
+            return json_response(self, 500, {'status': 'error', 'message': str(e)})
+
     def do_POST(self):
         is_valid, msg = validate_token(dict(self.headers))
         if not is_valid:

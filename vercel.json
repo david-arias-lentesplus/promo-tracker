@@ -66,27 +66,6 @@
       }
     },
     {
-      "src": "api/me.py",
-      "use": "@vercel/python",
-      "config": {
-        "includeFiles": [
-          "api/_*.py",
-          "data/users.json"
-        ]
-      }
-    },
-    {
-      "src": "api/notifications.py",
-      "use": "@vercel/python",
-      "config": {
-        "includeFiles": [
-          "api/_*.py",
-          "data/url_sku_images.csv",
-          "data/sku_use_data.csv"
-        ]
-      }
-    },
-    {
       "src": "api/analytics.py",
       "use": "@vercel/python",
       "config": {
@@ -108,26 +87,7 @@
       }
     },
     {
-      "src": "api/scraper_stats.py",
-      "use": "@vercel/python",
-      "config": {
-        "includeFiles": [
-          "api/_*.py",
-          "data/scraper_stats.json"
-        ]
-      }
-    },
-    {
       "src": "api/promo.py",
-      "use": "@vercel/python",
-      "config": {
-        "includeFiles": [
-          "api/_*.py"
-        ]
-      }
-    },
-    {
-      "src": "api/mcp_debug.py",
       "use": "@vercel/python",
       "config": {
         "includeFiles": [
@@ -144,6 +104,18 @@
     }
   ],
   "routes": [
+    {
+      "src": "/api/me",
+      "dest": "/api/users.py"
+    },
+    {
+      "src": "/api/scraper_stats",
+      "dest": "/api/scraper.py"
+    },
+    {
+      "src": "/api/notifications",
+      "dest": "/api/raw_data.py"
+    },
     {
       "src": "/api/(.*)",
       "dest": "/api/$1.py"

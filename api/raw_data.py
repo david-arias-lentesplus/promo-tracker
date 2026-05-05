@@ -22,6 +22,54 @@ from _data_service import (fetch_csv_text, load_image_map, parse_csv,
                            strip_internal)
 
 # ─── Handler ──────────────────────────────────────────────────
+
+# ── /api/notifications — merged from notifications.py ────────────────────────
+from datetime import datetime as _datetime, timezone as _tz
+
+def _notif_id(r: dict) -> str:
+    key = f"{r.get('sku') or r.get('product_name','')}_{r.get('date_end','')}_{r.get('pais','')}"
+    return key.replace(' ', '_')
+
+def _handle_notifications(self):
+    is_valid, msg = validate_token(dict(self.headers))
+    if not is_valid:
+        return json_response(self, 401, {'status': 'error', 'message': msg})
+    qs      = parse_qs(urlparse(self.path).query)
+    country = qs.get('country', [''])[0].strip()
+    try:
+        days = int(qs.get('days', ['7'])[0])
+    except ValueError:
+        days = 7
+    try:
+        t0        = time.time()
+        image_map = load_image_map()
+        raw_text  = fetch_csv_text()
+        all_rows  = parse_csv(raw_text, image_map)
+        today     = _datetime.now(_tz.utc).date()
+        pool      = apply_filters(all_rows, country=country, status='Activo')
+        notifs, seen = [], set()
+        for r in pool:
+            dr = r.get('days_remaining')
+            if dr is None or dr < 0 or dr > days:
+                continue
+            nid = _notif_id(r)
+            if nid in seen:
+                continue
+            seen.add(nid)
+            item = strip_internal(r)
+            item['id'] = nid
+            item['days_remaining'] = dr
+            notifs.append(item)
+        notifs.sort(key=lambda n: (n['days_remaining'], n.get('product_name', '')))
+        return json_response(self, 200, {
+            'status': 'ok', 'notifications': notifs, 'total': len(notifs),
+            'threshold_days': days, 'today': today.isoformat(),
+            'elapsed_ms': round((time.time() - t0) * 1000),
+        })
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return json_response(self, 500, {'status': 'error', 'message': str(e)})
+
 class handler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
@@ -32,6 +80,8 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        if urlparse(self.path).path.rstrip('/').endswith('/notifications'):
+            return _handle_notifications(self)
         is_valid, msg = validate_token(dict(self.headers))
         if not is_valid:
             return json_response(self, 401, {'status': 'error', 'message': msg})

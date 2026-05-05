@@ -35,6 +35,54 @@ def _safe_user(u: dict) -> dict:
     return {k: v for k, v in u.items() if k != 'password_hash'}
 
 
+
+# ── /api/me  (own-profile) — merged from me.py ───────────────────────────────
+import hashlib as _hashlib
+
+def _hash_pw(pw: str) -> str:
+    return _hashlib.sha256(pw.encode('utf-8')).hexdigest()
+
+def _safe_user(u: dict) -> dict:
+    return {k: v for k, v in u.items() if k != 'password_hash'}
+
+def _handle_me_get(self):
+    is_valid, msg = validate_token(dict(self.headers))
+    if not is_valid:
+        return json_response(self, 401, {'status': 'error', 'message': msg})
+    payload = get_token_payload(dict(self.headers))
+    uid  = payload.get('user_id') if payload else None
+    user = find_user_by_id(uid) if uid else None
+    if not user:
+        return json_response(self, 404, {'status': 'error', 'message': 'Usuario no encontrado'})
+    return json_response(self, 200, {'status': 'ok', 'user': _safe_user(user)})
+
+def _handle_me_put(self):
+    is_valid, msg = validate_token(dict(self.headers))
+    if not is_valid:
+        return json_response(self, 401, {'status': 'error', 'message': msg})
+    payload = get_token_payload(dict(self.headers))
+    uid     = payload.get('user_id') if payload else None
+    user    = find_user_by_id(uid) if uid else None
+    if not user:
+        return json_response(self, 404, {'status': 'error', 'message': 'Usuario no encontrado'})
+    try:
+        length = int(self.headers.get('Content-Length', 0))
+        body   = json.loads(self.rfile.read(length) or b'{}')
+    except Exception:
+        return json_response(self, 400, {'status': 'error', 'message': 'Body inválido'})
+    cur_pw = body.get('current_password', '')
+    if not cur_pw or _hash_pw(cur_pw) != user.get('password_hash', ''):
+        return json_response(self, 403, {'status': 'error', 'message': 'Contraseña actual incorrecta'})
+    users = load_users()
+    for u in users:
+        if u.get('id') == uid:
+            if body.get('display_name'): u['display_name'] = body['display_name'].strip()
+            if body.get('email'):        u['email']        = body['email'].strip()
+            if body.get('new_password'): u['password_hash']= _hash_pw(body['new_password'])
+            save_users(users)
+            return json_response(self, 200, {'status': 'ok', 'user': _safe_user(u)})
+    return json_response(self, 404, {'status': 'error', 'message': 'Usuario no encontrado'})
+
 class handler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
@@ -46,6 +94,8 @@ class handler(BaseHTTPRequestHandler):
 
     # ─── GET — list all users ──────────────────────────────────
     def do_GET(self):
+        if urlparse(self.path).path.rstrip('/').endswith('/me'):
+            return _handle_me_get(self)
         is_admin, msg, payload = validate_admin(dict(self.headers))
         if not is_admin:
             return json_response(self, 403, {'status': 'error', 'message': msg})
@@ -110,6 +160,8 @@ class handler(BaseHTTPRequestHandler):
 
     # ─── PUT — update user ─────────────────────────────────────
     def do_PUT(self):
+        if urlparse(self.path).path.rstrip('/').endswith('/me'):
+            return _handle_me_put(self)
         is_admin, msg, payload = validate_admin(dict(self.headers))
         if not is_admin:
             return json_response(self, 403, {'status': 'error', 'message': msg})
