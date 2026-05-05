@@ -5,6 +5,7 @@
  * Design System: LIVO
  */
 import React, { useState, useEffect, useRef, useCallback } from 'react'
+import PageLoader from '../components/PageLoader'
 import { apiRequest } from '@utils/api'
 import { useFilters } from '@context/FiltersContext'
 
@@ -303,6 +304,7 @@ export default function HSInfo() {
 
   return (
     <div className="animate-fade-in">
+      <PageLoader show={loading} />
 
       {/* ── Page header ────────────────────────────── */}
       <div className="flex items-start justify-between mb-6">

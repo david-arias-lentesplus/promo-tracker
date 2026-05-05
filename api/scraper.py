@@ -1708,6 +1708,8 @@ class handler(BaseHTTPRequestHandler):
         is_valid, msg = validate_token(dict(self.headers))
         if not is_valid:
             return json_response(self, 401, {'status': 'error', 'message': msg})
+        # msg contains the username when is_valid=True
+        _req_username = msg if is_valid else 'unknown'
 
         try:
             length = int(self.headers.get('Content-Length', 0))
@@ -1795,6 +1797,7 @@ class handler(BaseHTTPRequestHandler):
                     'units':      units,
                     'status':     result.get('status', 'unknown'),
                     'engine':     engine,
+                    'username':   _req_username,
                 }
                 month['history'].insert(0, entry)
                 month['history'] = month['history'][:100]   # máximo 100 entradas

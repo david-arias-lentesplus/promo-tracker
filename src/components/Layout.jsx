@@ -4,7 +4,7 @@
  * Topbar: botones de País + rango de fechas con botón "Hoy"
  * Design System: LIVO
  */
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { getCurrentUser } from '@utils/api'
 import { NavLink, useNavigate, Outlet } from 'react-router-dom'
 import { useFilters } from '@context/FiltersContext'
@@ -265,10 +265,34 @@ function Topbar({ onLogout }) {
   const navigate    = useNavigate()
   const unreadCount = useUnreadCount()
 
+  // Local pending values — updated on every keystroke / month-nav click
+  // Only committed to FiltersContext after 700ms of inactivity (debounce),
+  // so navigating months in the native calendar doesn't spam the API.
+  const [pendingFrom, setPendingFrom] = useState(dateFrom)
+  const [pendingTo,   setPendingTo]   = useState(dateTo)
+  const initRef = useRef(false)
+
+  // Sync incoming context → local when context changes externally (e.g. clear button)
+  useEffect(() => { setPendingFrom(dateFrom) }, [dateFrom])
+  useEffect(() => { setPendingTo(dateTo) },     [dateTo])
+
+  // Debounce: commit to context 700ms after the last change
+  useEffect(() => {
+    if (!initRef.current) { initRef.current = true; return }
+    const t = setTimeout(() => { if (pendingFrom !== dateFrom) setDateFrom(pendingFrom) }, 700)
+    return () => clearTimeout(t)
+  }, [pendingFrom]) // eslint-disable-line
+
+  useEffect(() => {
+    if (pendingTo === dateTo) return
+    const t = setTimeout(() => setDateTo(pendingTo), 700)
+    return () => clearTimeout(t)
+  }, [pendingTo]) // eslint-disable-line
+
   function setToday() {
     const today = new Date().toISOString().split('T')[0]
-    setDateFrom(today)
-    setDateTo(today)
+    setPendingFrom(today); setPendingTo(today)
+    setDateFrom(today);    setDateTo(today)   // instant — no debounce needed for button
   }
 
   return (
@@ -318,12 +342,12 @@ function Topbar({ onLogout }) {
 
         <input
           type="date"
-          value={dateFrom}
+          value={pendingFrom}
           onChange={e => {
             const val = e.target.value
-            setDateFrom(val)
+            setPendingFrom(val)
             // Si fecha fin no está fijada o es anterior al nuevo inicio, igualarla
-            if (!dateTo || dateTo < val) setDateTo(val)
+            if (!pendingTo || pendingTo < val) setPendingTo(val)
           }}
           className="h-8 px-2 text-xs bg-gray-50 border border-gray-200 rounded-lg
                      outline-none focus:border-[#0000E1] focus:ring-2 focus:ring-[#0000E1]/15
@@ -335,9 +359,9 @@ function Topbar({ onLogout }) {
 
         <input
           type="date"
-          value={dateTo}
-          min={dateFrom || undefined}
-          onChange={e => setDateTo(e.target.value)}
+          value={pendingTo}
+          min={pendingFrom || undefined}
+          onChange={e => setPendingTo(e.target.value)}
           className="h-8 px-2 text-xs bg-gray-50 border border-gray-200 rounded-lg
                      outline-none focus:border-[#0000E1] focus:ring-2 focus:ring-[#0000E1]/15
                      text-gray-700 cursor-pointer w-[130px]"
@@ -357,7 +381,7 @@ function Topbar({ onLogout }) {
         {/* Limpiar fechas */}
         {(dateFrom || dateTo) && (
           <button
-            onClick={() => { setDateFrom(''); setDateTo('') }}
+            onClick={() => { setPendingFrom(''); setPendingTo(''); setDateFrom(''); setDateTo('') }}
             className="text-xs text-gray-400 hover:text-red-400 transition-colors px-1"
             title="Limpiar fechas"
           >

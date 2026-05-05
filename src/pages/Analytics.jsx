@@ -3,6 +3,7 @@
  * Auditoría de promociones — lista paginada + verificación por scraping
  */
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import PageLoader from '../components/PageLoader'
 import { apiRequest } from '@utils/api'
 import { useFilters }  from '@context/FiltersContext'
 
@@ -935,6 +936,7 @@ export default function Analytics() {
 
   return (
     <div>
+      <PageLoader show={loading} />
       {/* Header */}
       <div className="flex items-start justify-between mb-5 gap-4">
         <div>

@@ -4,6 +4,7 @@
  * Vista: Dashboard Overview — KPI widgets + quick access
  * Design System: LIVO
  */
+import PageLoader from '../components/PageLoader'
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiRequest } from '@utils/api'
@@ -141,6 +142,7 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-5xl mx-auto animate-fade-in">
+      <PageLoader show={loading} />
 
       {/* Page header */}
       <div className="mb-6">

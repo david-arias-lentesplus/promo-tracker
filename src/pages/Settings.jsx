@@ -3,6 +3,7 @@
  * Admin-only: User Management + Browserless Usage Tracker
  */
 import React, { useState, useEffect, useCallback } from 'react'
+import PageLoader from '../components/PageLoader'
 import { apiRequest } from '@utils/api'
 
 // ─── Icons ─────────────────────────────────────────────────────
@@ -386,18 +387,19 @@ function BrowserlessTracker() {
             ) : (
               <>
                 {/* Table header */}
-                <div className="grid grid-cols-[1.4fr_1.2fr_0.8fr_0.8fr_0.7fr_0.6fr] gap-3 px-5 py-2
+                <div className="grid grid-cols-[1.4fr_1.2fr_0.8fr_0.8fr_0.7fr_0.7fr_0.6fr] gap-3 px-5 py-2
                                 text-[10px] font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-50">
                   <span>Fecha</span>
                   <span>Tipo promo</span>
                   <span>SKU</span>
                   <span>Duración</span>
                   <span>Unidades</span>
+                  <span>Usuario</span>
                   <span>Estado</span>
                 </div>
                 {history.map(entry => (
                   <div key={entry.id}
-                    className="grid grid-cols-[1.4fr_1.2fr_0.8fr_0.8fr_0.7fr_0.6fr] gap-3 px-5 py-3 items-center
+                    className="grid grid-cols-[1.4fr_1.2fr_0.8fr_0.8fr_0.7fr_0.7fr_0.6fr] gap-3 px-5 py-3 items-center
                                border-b border-gray-50 last:border-0 hover:bg-gray-50/60 transition-colors text-xs">
                     <span className="text-gray-500 font-mono">{fmtTs(entry.timestamp)}</span>
                     <span className="font-semibold text-gray-800 truncate">{entry.tipo_promo || '—'}</span>
@@ -405,6 +407,17 @@ function BrowserlessTracker() {
                     <span className="text-gray-600 tabular-nums">{fmtMs(entry.elapsed_ms)}</span>
                     <span className="font-bold text-gray-800 tabular-nums">
                       {entry.units} unit{entry.units !== 1 ? 's' : ''}
+                    </span>
+                    <span className="text-gray-600 truncate font-mono" title={entry.username || '—'}>
+                      {entry.username
+                        ? <span className="inline-flex items-center gap-1">
+                            <span className="w-4 h-4 rounded-full bg-[#0000E1]/10 text-[#0000E1] text-[9px] font-bold flex items-center justify-center">
+                              {(entry.username[0]||'').toUpperCase()}
+                            </span>
+                            {entry.username}
+                          </span>
+                        : <span className="text-gray-300">—</span>
+                      }
                     </span>
                     <span>{statusBadge(entry.status)}</span>
                   </div>
@@ -460,6 +473,7 @@ export default function Settings() {
 
   return (
     <div className="max-w-5xl">
+      <PageLoader show={loading} />
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>

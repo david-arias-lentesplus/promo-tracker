@@ -2,7 +2,8 @@
  * 📄 /src/pages/PromoPerformance.jsx
  * Tabs: Promo Review | Product Tier List | Promo Analysis
  */
-import React, { useEffect, useState, useMemo, useCallback } from 'react'
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react'
+import PageLoader from '../components/PageLoader'
 import { useFilters }  from '@context/FiltersContext'
 import { apiRequest }  from '@utils/api'
 
@@ -239,7 +240,7 @@ const PROMO_COLS = [
   {key:'avg_order_value',label:'Ticket Prom.',align:'right'},
 ]
 
-function PromoReview({ country, dateFrom, dateTo }) {
+function PromoReview({ country, dateFrom, dateTo, onLoaded }) {
   const [rows,setRows]=useState([]); const [loading,setLoading]=useState(false); const [error,setError]=useState(null)
   const [sort,setSort]=useState({key:'completed_orders',dir:'desc'}); const [search,setSearch]=useState('')
 
@@ -250,7 +251,7 @@ function PromoReview({ country, dateFrom, dateTo }) {
       const res=await apiRequest(`/promo?mode=performance&${p}`)
       if(res.status!=='ok') throw new Error(res.message||'Error')
       setRows(res.data||[])
-    } catch(e){ setError(e.message) } finally{ setLoading(false) }
+    } catch(e){ setError(e.message) } finally{ setLoading(false); onLoaded?.() }
   },[country,dateFrom,dateTo])
   useEffect(()=>{ fetchData() },[fetchData])
 
@@ -319,7 +320,7 @@ const TIER_COLORS = [
   'border-l-amber-600/70 bg-amber-50/30',
 ]
 
-function ProductTierList({ country, dateFrom, dateTo }) {
+function ProductTierList({ country, dateFrom, dateTo, onLoaded }) {
   const [products,setProducts]=useState([]); const [loading,setLoading]=useState(false); const [error,setError]=useState(null)
   const [filters,setFilters]=useState({manufacturers:[],product_types:[],use_durations:[]}); const [filtersLoaded,setFiltersLoaded]=useState(false)
   const [selMfr,setSelMfr]=useState(''); const [selType,setSelType]=useState(''); const [selDur,setSelDur]=useState('')
@@ -340,7 +341,7 @@ function ProductTierList({ country, dateFrom, dateTo }) {
       if(selMfr) p.set('manufacturer',selMfr); if(selType) p.set('product_type',selType); if(selDur) p.set('use_duration',selDur)
       const res=await apiRequest(`/promo?${p}`)
       if(res.status!=='ok') throw new Error(res.message); setProducts(res.data||[])
-    } catch(e){ setError(e.message) } finally{ setLoading(false) }
+    } catch(e){ setError(e.message) } finally{ setLoading(false); onLoaded?.() }
   },[country,dateFrom,dateTo,selMfr,selType,selDur])
 
   useEffect(()=>{ loadFilters() },[loadFilters])
@@ -707,7 +708,7 @@ function RankTable({ rows, valueKey, valueLabel, valueFormat, color }) {
   )
 }
 
-function PromoAnalysis({ country, dateFrom, dateTo }) {
+function PromoAnalysis({ country, dateFrom, dateTo, onLoaded }) {
   const [rows,    setRows]    = useState([])
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState(null)
@@ -723,7 +724,7 @@ function PromoAnalysis({ country, dateFrom, dateTo }) {
       const res = await apiRequest(`/promo?${p}`)
       setRows(res.data || [])
     } catch(e) { setError(e.message) }
-    finally    { setLoading(false) }
+    finally    { setLoading(false); onLoaded?.() }
   }, [country, dateFrom, dateTo])
 
   useEffect(() => { load() }, [load])
@@ -895,9 +896,19 @@ const TABS = [
 export default function PromoPerformance() {
   const { country, dateFrom, dateTo } = useFilters()
   const [activeTab, setActiveTab] = useState('review')
+  const switchTab = t => { setActiveTab(t); setLoading(true) }
+  const [loading, setLoading] = useState(true)
+  const handleTabLoaded = () => setLoading(false)
+  // Re-show loader whenever global filters (country / dates) change
+  const filterInitRef = useRef(false)
+  useEffect(() => {
+    if (!filterInitRef.current) { filterInitRef.current = true; return }
+    setLoading(true)
+  }, [country, dateFrom, dateTo])
 
   return (
     <div className="p-6 max-w-[1300px] mx-auto">
+      <PageLoader show={loading} />
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-xl font-black text-gray-900">Promo Performance</h1>
@@ -907,7 +918,7 @@ export default function PromoPerformance() {
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit">
         {TABS.map(t=>(
-          <button key={t.id} onClick={()=>setActiveTab(t.id)}
+          <button key={t.id} onClick={()=>switchTab(t.id)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all
               ${activeTab===t.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
             <span>{t.icon}</span>{t.label}
@@ -916,9 +927,9 @@ export default function PromoPerformance() {
       </div>
 
       {/* Tab content */}
-      {activeTab==='review'   && <PromoReview    country={country} dateFrom={dateFrom} dateTo={dateTo}/>}
-      {activeTab==='tier'     && <ProductTierList country={country} dateFrom={dateFrom} dateTo={dateTo}/>}
-      {activeTab==='analysis' && <PromoAnalysis  country={country} dateFrom={dateFrom} dateTo={dateTo}/>}
+      {activeTab==='review'   && <PromoReview    country={country} dateFrom={dateFrom} dateTo={dateTo} onLoaded={handleTabLoaded}/>}
+      {activeTab==='tier'     && <ProductTierList country={country} dateFrom={dateFrom} dateTo={dateTo} onLoaded={handleTabLoaded}/>}
+      {activeTab==='analysis' && <PromoAnalysis  country={country} dateFrom={dateFrom} dateTo={dateTo} onLoaded={handleTabLoaded}/>}
 
       <p className="text-xs text-gray-400 mt-4 text-right">Fuente: DWH · Silver.sales + Silver.sales_products · empresa = lentesplus</p>
     </div>

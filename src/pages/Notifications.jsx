@@ -4,6 +4,7 @@
  * Leídas se persisten en localStorage: 'notif_read_ids'
  */
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import PageLoader from '../components/PageLoader'
 import { apiRequest } from '@utils/api'
 import { useFilters } from '@context/FiltersContext'
 
@@ -228,6 +229,7 @@ export default function Notifications() {
 
   return (
     <div className="max-w-3xl">
+      <PageLoader show={loading} />
       {/* Header */}
       <div className="flex items-start justify-between mb-6 gap-4">
         <div>

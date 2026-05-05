@@ -4,6 +4,7 @@
  * PUT /api/me — requires current_password
  */
 import React, { useState, useEffect } from 'react'
+import PageLoader from '../components/PageLoader'
 import { apiRequest, getCurrentUser } from '@utils/api'
 
 // ─── Icons ─────────────────────────────────────────────────────
@@ -141,13 +142,7 @@ export default function AccountProfile() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-7 h-7 border-2 border-[#0000E1] border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
-  }
+  if (loading) return <PageLoader show={true} />
 
   const displayUser = profile || localUser
   const rolLabel    = displayUser?.role === 'admin' ? 'Administrador' : 'Usuario'
