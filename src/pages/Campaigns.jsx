@@ -3,9 +3,10 @@
  * Agente 1 — Frontend (Skill B)
  * Layout: modelos en columna izquierda, filtros en sidebar derecha
  * Tres modelos: BestSeller · Fabricantes · Gafas
+ * Rank badges de ventas reales (DWH) en BestSeller y Fabricantes.
  * Design System: LIVO
  */
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { apiRequest } from '@utils/api'
 import { useFilters } from '@context/FiltersContext'
 
@@ -95,6 +96,41 @@ function UseBadges({ use_type, use_duration }) {
   )
 }
 
+// ─── SalesBadge — posición en ventas DWH ─────────────────────
+function SalesBadge({ rank, qty, size = 'md' }) {
+  if (!rank) return null
+  const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : null
+
+  if (medal) {
+    return (
+      <div className="flex flex-col items-center gap-0.5">
+        <span className={size === 'sm' ? 'text-sm leading-none' : 'text-lg leading-none'}>{medal}</span>
+        {size !== 'sm' && qty != null && (
+          <span className="text-[9px] text-gray-400 font-semibold tabular-nums whitespace-nowrap">
+            {Number(qty).toLocaleString()} uds
+          </span>
+        )}
+      </div>
+    )
+  }
+  if (rank <= 10) {
+    return (
+      <div className="flex flex-col items-center gap-0.5">
+        <span className={`inline-flex items-center justify-center rounded-full bg-gray-100 text-gray-600 font-black border border-gray-200
+          ${size === 'sm' ? 'w-4 h-4 text-[9px]' : 'w-6 h-6 text-[11px]'}`}>
+          {rank}
+        </span>
+        {size !== 'sm' && qty != null && (
+          <span className="text-[9px] text-gray-400 font-semibold tabular-nums whitespace-nowrap">
+            {Number(qty).toLocaleString()} uds
+          </span>
+        )}
+      </div>
+    )
+  }
+  return null
+}
+
 // ─── CopyButton ───────────────────────────────────────────────
 function CopyBtn({ text, label }) {
   const [copied, setCopied] = useState(false)
@@ -157,10 +193,63 @@ const TABS = [
   { id: 'gafas',       label: 'Gafas' },
 ]
 
+// ─── Rank lookup helpers ──────────────────────────────────────
+function buildRankMap(dwhProducts) {
+  const skuMap  = {}  // normalized sku  → {rank, qty, orders, gmv}
+  const nameMap = {}  // normalized name → {rank, qty, orders, gmv}
+  dwhProducts.forEach((p, i) => {
+    const info = { rank: i + 1, qty: p.total_quantity || 0, orders: p.order_count || 0, gmv: p.total_gmv_usd || 0 }
+    if (p.sku)  skuMap[p.sku.toLowerCase().trim()]                   = info
+    if (p.name) nameMap[p.name.toLowerCase().trim().slice(0, 40)]    = info
+  })
+  return { skuMap, nameMap }
+}
+
+function getRank(sku, name, rankMap) {
+  if (!rankMap) return null
+  const { skuMap, nameMap } = rankMap
+  // 1. SKU exact match (most reliable)
+  if (sku) {
+    const k = sku.toLowerCase().trim()
+    if (skuMap[k]) return skuMap[k]
+  }
+  // 2. Name match — try progressively shorter prefixes
+  if (name) {
+    const n = name.toLowerCase().trim()
+    for (const len of [40, 25, 15]) {
+      const k = n.slice(0, len)
+      if (k && nameMap[k]) return nameMap[k]
+    }
+    // 3. Partial: scan nameMap keys for a product that starts with our name prefix
+    const n25 = n.slice(0, 25)
+    for (const [k, v] of Object.entries(nameMap)) {
+      if (k.startsWith(n25) || n25.startsWith(k.slice(0, 20))) return v
+    }
+  }
+  return null
+}
+
 // ─── BestSeller Section ───────────────────────────────────────
-function BestSellerSection({ data, selectedIds, onToggle }) {
+function BestSellerSection({ data, selectedIds, onToggle, rankMap }) {
   if (!data) return null
-  const { products, email_copy } = data
+  const { products: rawProducts, email_copy } = data
+
+  // Sort: J&J first, then by DWH sales rank, unranked last
+  const products = useMemo(() => {
+    return [...rawProducts].sort((a, b) => {
+      const aIsJJ = (a.fabricante || '').toLowerCase().includes('johnson')
+      const bIsJJ = (b.fabricante || '').toLowerCase().includes('johnson')
+      if (aIsJJ && !bIsJJ) return -1
+      if (!aIsJJ && bIsJJ) return  1
+      const ra = getRank(a.sku, a.product_name, rankMap)
+      const rb = getRank(b.sku, b.product_name, rankMap)
+      if (ra && !rb) return -1
+      if (!ra && rb) return  1
+      if (ra && rb) return ra.rank - rb.rank
+      return 0
+    })
+  }, [rawProducts, rankMap])
+
   const selCount = products.filter(p => selectedIds.has(p.sku)).length
 
   return (
@@ -168,6 +257,7 @@ function BestSellerSection({ data, selectedIds, onToggle }) {
       <p className="text-sm text-gray-500 mb-4">
         Los 6 mejores productos con promo activa de diferentes fabricantes.
         <span className="ml-1 text-[#0000E1] font-semibold">Johnson &amp; Johnson</span> siempre aparece primero.
+        {rankMap && <span className="ml-1 text-gray-400">· Ordenados por ventas reales del DWH.</span>}
       </p>
 
       {products.length === 0 ? (
@@ -176,17 +266,27 @@ function BestSellerSection({ data, selectedIds, onToggle }) {
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
             {products.map(p => {
-              const sel = selectedIds.has(p.sku)
+              const sel     = selectedIds.has(p.sku)
+              const rankInfo = getRank(p.sku, p.product_name, rankMap)
               return (
                 <div key={p.sku || p.product_name}
                   onClick={() => onToggle(p.sku)}
                   className={`card p-4 cursor-pointer transition-all duration-150 border-2
                     ${sel ? 'border-[#0000E1] bg-blue-50/40' : 'border-transparent hover:border-gray-200'}`}>
                   <div className="flex items-start gap-3">
+                    {/* Checkbox */}
                     <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all
                       ${sel ? 'bg-[#0000E1] border-[#0000E1]' : 'border-gray-300'}`}>
                       {sel && <IconCheck size={11}/>}
                     </div>
+
+                    {/* Sales rank badge */}
+                    {rankInfo && (
+                      <div className="flex-shrink-0 flex items-start pt-0.5">
+                        <SalesBadge rank={rankInfo.rank} qty={rankInfo.qty} size="md" />
+                      </div>
+                    )}
+
                     <ProductThumb url={p.url_image} name={p.product_name} size="lg" />
                     <div className="min-w-0 flex-1">
                       {p.product_url
@@ -204,6 +304,11 @@ function BestSellerSection({ data, selectedIds, onToggle }) {
                         </span>
                       )}
                       <UseBadges use_type={p.use_type} use_duration={p.use_duration} />
+                      {rankInfo && (
+                        <p className="text-[10px] text-gray-400 mt-1">
+                          {rankInfo.orders.toLocaleString()} órdenes · ${rankInfo.gmv.toLocaleString('en-US',{maximumFractionDigits:0})} GMV
+                        </p>
+                      )}
                     </div>
                   </div>
                   {p.promo_marca && (
@@ -235,7 +340,7 @@ function BestSellerSection({ data, selectedIds, onToggle }) {
 }
 
 // ─── Fabricantes Section ──────────────────────────────────────
-function FabricantesSection({ data, selectedGroupIds, onToggleGroup, brandFilter, onBrandFilter }) {
+function FabricantesSection({ data, selectedGroupIds, onToggleGroup, brandFilter, onBrandFilter, rankMap }) {
   if (!data) return null
   const { groups, brand_names } = data
 
@@ -247,6 +352,7 @@ function FabricantesSection({ data, selectedGroupIds, onToggleGroup, brandFilter
     <div>
       <p className="text-sm text-gray-500 mb-4">
         Grupos de promos por fabricante, listos para email marketing segmentado.
+        {rankMap && <span className="ml-1 text-gray-400">· Productos ordenados por ventas reales del DWH.</span>}
       </p>
 
       {/* Brand filter */}
@@ -271,6 +377,16 @@ function FabricantesSection({ data, selectedGroupIds, onToggleGroup, brandFilter
             const gid = `${group.fabricante}|${group.promo_marca}|${group.date_start}`
             const sel = selectedGroupIds.has(gid)
             const expiring = group.is_expiring_soon
+
+            // Sort products by DWH rank, unranked last
+            const sortedProducts = [...group.products].sort((a, b) => {
+              const ra = getRank(a.sku, a.product_name, rankMap)
+              const rb = getRank(b.sku, b.product_name, rankMap)
+              if (ra && !rb) return -1
+              if (!ra && rb) return  1
+              if (ra && rb) return ra.rank - rb.rank
+              return 0
+            })
 
             return (
               <div key={gid}
@@ -314,25 +430,40 @@ function FabricantesSection({ data, selectedGroupIds, onToggleGroup, brandFilter
                   </span>
                 </div>
 
-                {/* Product list */}
+                {/* Product list — sorted by DWH rank */}
                 <div className="px-5 py-3 border-t border-gray-100">
                   <div className="flex flex-wrap gap-2">
-                    {group.products.map(p => (
-                      <div key={p.sku || p.product_name} className="flex items-center gap-2 bg-gray-50 rounded-lg px-2.5 py-1.5 border border-gray-100">
-                        <ProductThumb url={p.url_image} name={p.product_name} />
-                        <div>
-                          {p.product_url
-                            ? <a href={p.product_url} target="_blank" rel="noopener noreferrer"
-                                  className="text-[11px] font-bold text-[#0000E1] max-w-[120px] truncate hover:underline block">
-                                {p.product_name}
-                              </a>
-                            : <p className="text-[11px] font-bold text-gray-700 max-w-[120px] truncate">{p.product_name}</p>
-                          }
-                          {p.sku && <p className="text-[10px] text-gray-400 font-mono">{p.sku}</p>}
-                          <UseBadges use_type={p.use_type} use_duration={p.use_duration} />
+                    {sortedProducts.map(p => {
+                      const rankInfo = getRank(p.sku, p.product_name, rankMap)
+                      return (
+                        <div key={p.sku || p.product_name}
+                          className="flex items-center gap-2 bg-gray-50 rounded-lg px-2.5 py-1.5 border border-gray-100 relative">
+                          {/* Rank badge — top-left corner of chip */}
+                          {rankInfo && (
+                            <div className="flex-shrink-0">
+                              <SalesBadge rank={rankInfo.rank} qty={null} size="sm" />
+                            </div>
+                          )}
+                          <ProductThumb url={p.url_image} name={p.product_name} />
+                          <div>
+                            {p.product_url
+                              ? <a href={p.product_url} target="_blank" rel="noopener noreferrer"
+                                    className="text-[11px] font-bold text-[#0000E1] max-w-[120px] truncate hover:underline block">
+                                  {p.product_name}
+                                </a>
+                              : <p className="text-[11px] font-bold text-gray-700 max-w-[120px] truncate">{p.product_name}</p>
+                            }
+                            {p.sku && <p className="text-[10px] text-gray-400 font-mono">{p.sku}</p>}
+                            <UseBadges use_type={p.use_type} use_duration={p.use_duration} />
+                            {rankInfo && (
+                              <p className="text-[9px] text-gray-400 mt-0.5 tabular-nums">
+                                {rankInfo.qty.toLocaleString()} uds vendidas
+                              </p>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
 
@@ -398,7 +529,6 @@ function GafasSection({ data, selectedGroupIds, onToggleGroup }) {
                 </span>
               </div>
 
-              {/* Product list */}
               <div className="px-5 py-3 border-t border-gray-100">
                 <div className="flex flex-wrap gap-2">
                   {group.products.map(p => (
@@ -420,7 +550,6 @@ function GafasSection({ data, selectedGroupIds, onToggleGroup }) {
                 </div>
               </div>
 
-              {/* Email copy — siempre visible */}
               <div className="px-5 pb-4">
                 <EmailCopyPanel copy={group.email_copy} title={`Email Copy — Gafas · ${group.fabricante}`} />
               </div>
@@ -494,7 +623,6 @@ function FilterSidebar({ meta, typeFilter, setTypeFilter, useTypeFilter, setUseT
         </div>
 
         <div className="space-y-4">
-          {/* Tipo de producto */}
           {uniqueTypes.length > 0 && (
             <div>
               <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
@@ -509,7 +637,6 @@ function FilterSidebar({ meta, typeFilter, setTypeFilter, useTypeFilter, setUseT
             </div>
           )}
 
-          {/* Tipo de uso */}
           {uniqueUseTypes.length > 0 && (
             <div>
               <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
@@ -524,7 +651,6 @@ function FilterSidebar({ meta, typeFilter, setTypeFilter, useTypeFilter, setUseT
             </div>
           )}
 
-          {/* Duración de uso */}
           {uniqueUseDurs.length > 0 && (
             <div>
               <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
@@ -570,6 +696,15 @@ export default function Campaigns() {
   const [selectedBs,     setSelectedBs]     = useState(new Set())
   const [selectedGroups, setSelectedGroups] = useState(new Set())
 
+  // DWH rank data for sales badges
+  const [dwhProducts, setDwhProducts] = useState([])
+  const [dwhStatus,   setDwhStatus]   = useState('')
+
+  const rankMap = useMemo(() => {
+    if (!dwhProducts.length) return null
+    return buildRankMap(dwhProducts)
+  }, [dwhProducts])
+
   const buildParams = (overrides = {}) => new URLSearchParams({
     ...(country          ? { country                           } : {}),
     ...(dateFrom         ? { date_from:    dateFrom            } : {}),
@@ -591,7 +726,32 @@ export default function Campaigns() {
     }
   }, [country, dateFrom, dateTo, typeFilter, useTypeFilter, useDurFilter]) // eslint-disable-line
 
-  useEffect(() => { fetchData() }, []) // eslint-disable-line
+  // Fetch DWH rank data — use broad 180-day window so badges show even when
+  // campaign filter is set to a narrow promo period.
+  const fetchDwhRank = useCallback(async () => {
+    try {
+      const today  = new Date()
+      const past   = new Date(today); past.setDate(today.getDate() - 180)
+      const iso    = d => d.toISOString().slice(0, 10)
+      const params = new URLSearchParams({
+        mode:      'product_tier',
+        date_from: iso(past),
+        date_to:   iso(today),
+        ...(country ? { country } : {}),
+      })
+      const res = await apiRequest(`/promo?${params}`)
+      const products = res.data || []
+      setDwhProducts(products)
+      setDwhStatus(products.length > 0 ? `${products.length} productos DWH` : 'sin datos DWH')
+    } catch {
+      setDwhStatus('DWH no disponible')
+    }
+  }, [country]) // eslint-disable-line
+
+  useEffect(() => {
+    fetchData()
+    fetchDwhRank()
+  }, []) // eslint-disable-line
 
   const prevRef = useRef({ country, dateFrom, dateTo, typeFilter, useTypeFilter, useDurFilter })
   useEffect(() => {
@@ -601,8 +761,9 @@ export default function Campaigns() {
       prevRef.current = { country, dateFrom, dateTo, typeFilter, useTypeFilter, useDurFilter }
       setSelectedBs(new Set()); setSelectedGroups(new Set())
       fetchData()
+      fetchDwhRank()
     }
-  }, [country, dateFrom, dateTo, typeFilter, useTypeFilter, useDurFilter, fetchData])
+  }, [country, dateFrom, dateTo, typeFilter, useTypeFilter, useDurFilter, fetchData, fetchDwhRank])
 
   const handleFilterApply = (overrides) => {
     const merged = {
@@ -631,9 +792,14 @@ export default function Campaigns() {
                 {campaignData.meta.total_active} promos activas
               </span>
             )}
+            {dwhStatus && (
+              <span className="ml-2 text-[11px] text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">
+                📊 {dwhStatus}
+              </span>
+            )}
           </p>
         </div>
-        <button onClick={() => fetchData()} disabled={loading}
+        <button onClick={() => { fetchData(); fetchDwhRank() }} disabled={loading}
           className="flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold
                      border-[1.5px] border-blue-600 text-blue-600
                      hover:bg-blue-50 disabled:opacity-50 transition-all">
@@ -679,6 +845,7 @@ export default function Campaigns() {
                   data={campaignData?.bestseller}
                   selectedIds={selectedBs}
                   onToggle={toggleBs}
+                  rankMap={rankMap}
                 />
               )}
               {activeTab === 'fabricantes' && (
@@ -688,6 +855,7 @@ export default function Campaigns() {
                   onToggleGroup={toggleGroup}
                   brandFilter={brandFilter}
                   onBrandFilter={setBrandFilter}
+                  rankMap={rankMap}
                 />
               )}
               {activeTab === 'gafas' && (
@@ -717,7 +885,7 @@ export default function Campaigns() {
                          bg-[#0000E1] text-white rounded-full px-6 py-3
                          flex items-center gap-4 shadow-xl shadow-blue-900/30">
           <span className="text-sm font-bold">
-            {selectedBs.size + selectedGroups.size} seleccionado{selectedBs.size+selectedGroups.size>1?'s':''}
+            {selectedBs.size + selectedGroups.size} seleccionado{(selectedBs.size+selectedGroups.size)>1?'s':''}
           </span>
           <div className="w-px h-4 bg-white/30"/>
           <button

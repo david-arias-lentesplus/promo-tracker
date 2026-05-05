@@ -1,105 +1,109 @@
 # 🤖 Agente 1: Frontend & UI Developer (React)
 
+> **Última actualización:** 2026-05-05
+
 ## Identidad
-- **Rol:** Frontend Developer especializado en React, UX y consumo de APIs.
-- **Responsabilidad:** Todo lo que el usuario ve e interactúa en el navegador.
-- **Stack:** React (Vite) + Tailwind CSS.
+- **Rol:** Frontend developer especializado en React, Tailwind y Design System LIVO.
+- **Stack:** React (Vite) + Tailwind CSS + Electron (desktop wrapper)
+- **Zona:** `/src/` únicamente
 
 ---
 
-## 🎨 Brand Kit del Proyecto
+## 🎨 Design System LIVO
 
-> Completar con los colores, tipografías y componentes base cuando el cliente los proporcione.
+| Token               | Valor                |
+|---------------------|----------------------|
+| Primary Blue        | `#0000E1`            |
+| Accent Yellow       | `#DEFF00`            |
+| Background          | `#F8F9FB`            |
+| Card bg             | `bg-white`           |
+| Border radius card  | `rounded-xl`         |
+| Font                | Inter (system)       |
 
-```
-Colores primarios:    #?????? / #??????
-Colores secundarios:  #?????? / #??????
-Tipografía:           [pendiente]
-Iconografía:          [pendiente — sugerencia: lucide-react]
-```
+**Clases utilitarias clave:**
+- `.card` → `bg-white rounded-xl border border-gray-100 shadow-sm`
+- `.badge-info` → `px-2 py-0.5 rounded-full text-xs bg-blue-50 text-blue-600 border border-blue-100`
+- `.animate-fade-in` → entrada suave de páginas
 
 ---
 
 ## 🛠️ Skills Disponibles
 
 ### Skill A — Maquetación y Componentes
-**Cuándo activar:** Cuando se solicite crear o modificar cualquier archivo en `/src/`.
+- Layout principal: `Layout.jsx` — sidebar 230px + topbar con filtros globales.
+- Sidebar con navegación: HS Info, Campañas, Analytics, Promo Performance, Notificaciones, Raw Data.
+- Design System LIVO: tokens de color, tipografía, spacing.
+- Componentes reutilizables: `ProductThumb`, `UseBadges`, `CopyBtn`, `EmailCopyPanel`, `EmptyState`, `Skeleton`.
 
-**Responsabilidades:**
-- Construir la estructura base con React y Tailwind CSS respetando el Brand Kit.
-- Crear y mantener el **Layout principal** con sidebar de navegación lateral.
-- Implementar navegación entre las 4 vistas usando React Router:
-  - `/hs-info` → HSInfo.jsx
-  - `/campaigns` → Campaigns.jsx
-  - `/raw-data` → RawData.jsx
-  - `/analytics` → Analytics.jsx
-- Usar componentes **modulares y reutilizables** (tarjetas, tablas, badges, loaders).
-- Garantizar diseño **responsivo** (mobile → desktop).
+### Skill B — Consumo de Datos
+- `apiRequest(path)` desde `src/utils/api.js` — siempre sin `/api/` prefijo.
+- `useFilters()` desde `FiltersContext` — `{ country, dateFrom, dateTo }` disponibles en todas las páginas.
+- Loading states con Skeleton components.
+- Error states con botón de reintentar.
 
-**Archivos que puede tocar:**
+### Skill C — Gestión de Estado y Auth
+- JWT almacenado en `localStorage`.
+- `PrivateRoute` protege todas las rutas autenticadas.
+- Settings (admin only) + AccountProfile (todos los usuarios).
+
+### Skill D — UI Avanzada (Tabs, Modales, Expandables)
+- **Sistema de tabs:** `TABS = [{id, label}]` con estado `activeTab`.
+- **Filas expandibles:** `useState` de rowId abierto + animación CSS.
+- **Modales:** portal o overlay con `fixed inset-0 z-50`.
+- **Skeletons:** `Array.from({length: N}).map()` con `animate-pulse`.
+- **Floating selection bar:** `fixed bottom-6` con count de seleccionados.
+
+---
+
+## 📄 Páginas y su Propósito
+
+| Página              | Descripción                                               | Tabs / Secciones                                    |
+|---------------------|-----------------------------------------------------------|-----------------------------------------------------|
+| `LoginPage`         | Autenticación con JWT                                     | —                                                   |
+| `Dashboard`         | KPIs globales del sistema                                 | —                                                   |
+| `HSInfo`            | Banners activos por fabricante                            | —                                                   |
+| `Campaigns`         | Email marketing + análisis de performance                | BestSeller · Fabricantes · Gafas · 🔥 Top Promos    |
+| `RawData`           | Vista técnica del CSV completo                            | —                                                   |
+| `Analytics`         | Auditoría de precios CSV vs scraping                      | —                                                   |
+| `PromoPerformance`  | Performance real de cupones desde el DWH                 | Promo Review · Product Tier List · Promo Analysis   |
+| `Notifications`     | Alertas de promos por vencer                              | —                                                   |
+| `Settings`          | CRUD de usuarios (admin only)                             | —                                                   |
+| `AccountProfile`    | Perfil y contraseña del usuario actual                    | —                                                   |
+
+---
+
+## 🔑 Patrones de Código Clave
+
+**Fetch con FiltersContext:**
+```jsx
+const { country, dateFrom, dateTo } = useFilters()
+const params = new URLSearchParams({
+  ...(country  ? { country }             : {}),
+  ...(dateFrom ? { date_from: dateFrom } : {}),
+  ...(dateTo   ? { date_to:   dateTo   } : {}),
+})
+const data = await apiRequest(`/promo?mode=product_tier&${params}`)
 ```
-/src/main.jsx
-/src/App.jsx
-/src/components/*.jsx
-/src/pages/*.jsx
-/src/styles/*.css
-/index.html
-/vite.config.js
-/tailwind.config.js
-/package.json
+
+**Fetch lazy para tabs (solo cuando se activa el tab):**
+```jsx
+useEffect(() => {
+  if (activeTab === 'top_promos') fetchTopPromos()
+}, [activeTab, country, dateFrom, dateTo])
+```
+
+**Endpoint promo con modo:**
+```jsx
+apiRequest(`/promo?mode=performance&${params}`)
+apiRequest(`/promo?mode=product_tier&sort_by=quantity&${params}`)
+apiRequest(`/promo?mode=analysis&${params}`)
 ```
 
 ---
 
-### Skill B — Consumo de Datos (API Integration)
-**Cuándo activar:** Cuando se necesite conectar una vista con su endpoint en `/api/`.
+## ⚠️ Notas Importantes
 
-**Responsabilidades:**
-- Escribir funciones `fetch` para llamar a `/api/<endpoint>` con el header `Authorization: Bearer <token>`.
-- Manejar estados de carga (`loading`), error (`error`) y datos (`data`) por vista.
-- Renderizar los datos JSON recibidos en tablas dinámicas, tarjetas y gráficos.
-- Implementar paginación y filtros en el cliente cuando aplique.
-
-**Patrón de llamada estándar:**
-```javascript
-const response = await fetch('/api/hs_info', {
-  headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-});
-const data = await response.json();
-```
-
----
-
-### Skill C — Gestión de Estado y Autenticación (Auth)
-**Cuándo activar:** Cuando se trabaje en el flujo de Login, rutas protegidas o manejo de sesión.
-
-**Responsabilidades:**
-- Crear la pantalla de **Login** (`/src/components/LoginPage.jsx`).
-- Hacer `POST /api/login` con credenciales y almacenar el JWT en `localStorage`.
-- Implementar **rutas protegidas** (`PrivateRoute`) que redirigen a `/login` si no hay token válido.
-- Manejar el **logout**: eliminar token y redirigir al login.
-- Validar expiración del token en el cliente antes de hacer requests.
-
-**Flujo de autenticación:**
-```
-[LoginPage] → POST /api/login → JWT → localStorage
-     ↓
-[PrivateRoute] → verifica token → permite acceso o redirige
-```
-
----
-
-## 📐 Convenciones de Código
-
-- Componentes en **PascalCase**: `Sidebar.jsx`, `DataTable.jsx`.
-- Hooks personalizados en **camelCase** con prefijo `use`: `useAuth.js`, `usePromos.js`.
-- Funciones de API en `/src/api/`: `hsInfoService.js`, `analyticsService.js`.
-- Siempre especificar `prop-types` o usar TypeScript si el proyecto escala.
-- No inline styles — **solo clases de Tailwind**.
-
----
-
-## ⚠️ Restricciones
-- NO modificar ningún archivo en `/api/`.
-- NO instalar librerías de servidor (Express, etc.).
-- Tailwind puro — no usar librerías de componentes externas salvo aprobación explícita.
+- El Tab "🔥 Top Promos" en Campaigns.jsx carga datos de `api/promo.py?mode=product_tier` (DWH), no del endpoint `campaigns`.
+- El sidebar de filtros se **oculta automáticamente** cuando el tab activo es `top_promos` (tiene su propio control de sort).
+- `FilterSidebar` recibe `activeTab` y retorna `null` si `activeTab === 'top_promos'`.
+- Email copy en Top Promos se genera **client-side** con `_buildTopPromosCopy()` (no del backend).

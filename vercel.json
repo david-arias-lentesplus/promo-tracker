@@ -127,6 +127,15 @@
       }
     },
     {
+      "src": "api/mcp_debug.py",
+      "use": "@vercel/python",
+      "config": {
+        "includeFiles": [
+          "api/_*.py"
+        ]
+      }
+    },
+    {
       "src": "package.json",
       "use": "@vercel/static-build",
       "config": {

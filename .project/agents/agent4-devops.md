@@ -1,174 +1,94 @@
-# 🤖 Agente 4: Security & DevOps (Vercel)
+# 🤖 Agente 4: Security & DevOps (Vercel + Electron)
+
+> **Última actualización:** 2026-05-05
 
 ## Identidad
-- **Rol:** Security Engineer y DevOps especializado en despliegue en Vercel y seguridad de APIs.
-- **Responsabilidad:** Autenticación, configuración del monorepo y protección de todos los endpoints.
-- **Stack:** Python 3.x para auth + `vercel.json` para routing.
+- **Rol:** Responsable de autenticación, deploy en Vercel, dev server local y desktop app Electron.
+- **Stack:** Python 3.x (PyJWT) + vercel.json + Electron
+- **Zona:** `/api/login.py`, `/api/_auth.py`, `/api/users.py`, `/api/me.py`, `vercel.json`, `electron/`, `dev-server.py`
 
 ---
 
 ## 🛠️ Skills Disponibles
 
-### Skill A — Autenticación API (JWT)
-**Cuándo activar:** Al crear o modificar `/api/login.py` o la utilidad de validación de tokens.
+### Skill A — Autenticación y Usuarios
 
-**Responsabilidades:**
-- Crear el endpoint `POST /api/login` que valida credenciales y devuelve un JWT.
-- Crear una función utilitaria compartida `_auth.py` para validar tokens en todos los endpoints.
-- Usar `PyJWT` para firmar y verificar tokens con `HS256`.
-- Las credenciales válidas se leen desde **Variables de Entorno de Vercel** (nunca hardcodeadas).
-- Los tokens expiran en **8 horas** por defecto.
+**`api/login.py`** — Login, genera JWT
+**`api/_auth.py`** — Helpers: `get_token_payload()`, `validate_admin()`, `load_users()`
+**`api/users.py`** — CRUD completo de usuarios (admin only): GET list, POST create, PUT update, DELETE
+**`api/me.py`** — Perfil propio: GET info, PUT update name/password
 
-**Implementación `/api/login.py`:**
+**Patrón de validación JWT en todos los endpoints:**
 ```python
-import json
-import os
-import jwt
-import hashlib
-from datetime import datetime, timedelta, timezone
-
-def handler(request):
-    if request.method != 'POST':
-        return {"statusCode": 405, "body": json.dumps({"error": "Method Not Allowed"})}
-    
-    try:
-        body = json.loads(request.body)
-        username = body.get('username', '')
-        password = body.get('password', '')
-        
-        # Comparar contra variables de entorno
-        valid_user = os.environ.get('ADMIN_USER', '')
-        valid_pass_hash = os.environ.get('ADMIN_PASSWORD_HASH', '')
-        input_pass_hash = hashlib.sha256(password.encode()).hexdigest()
-        
-        if username != valid_user or input_pass_hash != valid_pass_hash:
-            return {"statusCode": 401, "body": json.dumps({"error": "Credenciales inválidas"})}
-        
-        # Generar JWT
-        secret = os.environ.get('JWT_SECRET', 'fallback-secret-change-in-prod')
-        payload = {
-            "sub": username,
-            "exp": datetime.now(timezone.utc) + timedelta(hours=8)
-        }
-        token = jwt.encode(payload, secret, algorithm='HS256')
-        
-        return {"statusCode": 200, "body": json.dumps({"token": token})}
-    
-    except Exception as e:
-        return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
+from api._auth import get_token_payload
+payload = get_token_payload(req)
+if not payload:
+    return json_response({'error': 'Unauthorized'}, 401)
 ```
 
-**Utilidad compartida `/api/_auth.py`:**
-```python
-import os
-import jwt
-from datetime import datetime, timezone
+**Almacenamiento de usuarios:**
+- `/data/users.json` (fuente de verdad)
+- `/tmp/users.json` (copia de trabajo en Vercel — Serverless no puede escribir en `/data/`)
+- `load_users()` en `_auth.py` maneja la copia automática a `/tmp/`
 
-def validate_token(request) -> tuple[bool, str]:
-    """
-    Devuelve (is_valid: bool, username: str | error_msg: str)
-    """
-    auth_header = request.headers.get('Authorization', '')
-    if not auth_header.startswith('Bearer '):
-        return False, "Token no proporcionado"
-    
-    token = auth_header.split(' ')[1]
-    secret = os.environ.get('JWT_SECRET', 'fallback-secret-change-in-prod')
-    
-    try:
-        payload = jwt.decode(token, secret, algorithms=['HS256'])
-        return True, payload.get('sub', '')
-    except jwt.ExpiredSignatureError:
-        return False, "Token expirado"
-    except jwt.InvalidTokenError:
-        return False, "Token inválido"
+### Skill B — Configuración Vercel
+
+**Límite crítico: MÁXIMO 12 serverless functions en Vercel Hobby.**
+
+**Estado actual (12/12 — LLENO):**
+```
+login, raw_data, stats, hs_info, campaigns, users, me,
+notifications, analytics, scraper, scraper_stats, promo
 ```
 
-**Uso en cualquier endpoint:**
-```python
-from _auth import validate_token
+**Regla de consolidación:**
+> Si se necesita nueva funcionalidad, agregar `?mode=nuevo` a un endpoint existente.
+> NO crear nuevos archivos `.py` en `/api/` sin eliminar otro primero.
 
-def handler(request):
-    is_valid, result = validate_token(request)
-    if not is_valid:
-        return {"statusCode": 401, "body": json.dumps({"error": result})}
-    # ... lógica del endpoint
-```
-
----
-
-### Skill B — Configuración Vercel (`vercel.json`)
-**Cuándo activar:** Al configurar el despliegue inicial o modificar el routing.
-
-**Responsabilidades:**
-- Asegurar que `/api/*` ejecute las funciones Python.
-- Asegurar que todas las demás rutas sirvan el `index.html` de React (SPA routing).
-- Configurar el directorio de output del build de Vite.
-- Manejar variables de entorno de forma segura.
-
-**`vercel.json` base:**
+**`vercel.json` — estructura de builds Python:**
 ```json
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "api/*.py",
-      "use": "@vercel/python"
-    },
-    {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "dist"
-      }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/api/$1.py"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
-    }
-  ]
+  "src": "api/promo.py",
+  "use": "@vercel/python",
+  "config": { "includeFiles": ["api/_*.py"] }
 }
 ```
+> El `includeFiles: ["api/_*.py"]` es necesario para que los helpers privados (`_auth.py`, `_data_service.py`) estén disponibles en runtime.
 
----
+### Skill C — Dev Server Local
 
-## 📌 Variables de Entorno Requeridas
+**`dev-server.py`** — Servidor HTTP que emula Vercel Serverless localmente:
+- Puerto: `8000`
+- Proxy dinámico: carga módulos Python en `/api/` via `importlib.util`
+- Soporta todos los query params y métodos HTTP
+- Sirve el frontend compilado de `/dist`
 
-Configurar en **Vercel Dashboard → Project Settings → Environment Variables**:
+**Para desarrollo local:**
+```bash
+# Terminal 1 — Frontend (hot reload)
+npm run dev
 
-| Variable               | Entorno       | Descripción                                   |
-|------------------------|---------------|-----------------------------------------------|
-| `JWT_SECRET`           | Production    | Clave secreta larga y aleatoria (mín. 32 chars) |
-| `ADMIN_USER`           | Production    | Nombre de usuario del administrador           |
-| `ADMIN_PASSWORD_HASH`  | Production    | SHA-256 de la contraseña (nunca texto plano)  |
-| `ECOMMERCE_URL`        | Production    | URL base del e-commerce a auditar             |
-
-**Generar hash de contraseña:**
-```python
-import hashlib
-print(hashlib.sha256("mi-contraseña-segura".encode()).hexdigest())
+# Terminal 2 — Backend
+python dev-server.py
 ```
 
 ---
 
-## 🔒 Checklist de Seguridad Pre-Deploy
+## 📌 Variables de Entorno
 
-- [ ] `JWT_SECRET` configurado en Vercel (nunca en código fuente)
-- [ ] `ADMIN_PASSWORD_HASH` es SHA-256 (nunca texto plano en env vars)
-- [ ] Todos los endpoints en `/api/` (excepto `/api/login`) validan token JWT
-- [ ] CORS configurado correctamente en `vercel.json`
-- [ ] El CSV en `/data/` no es accesible públicamente (verificar en Vercel)
-- [ ] No hay credenciales ni secrets en el código commiteado a Git
+| Variable            | Dónde se usa                        | Descripción                               |
+|---------------------|-------------------------------------|-------------------------------------------|
+| `JWT_SECRET`        | `_auth.py`                          | Clave para firmar/verificar tokens JWT    |
+| `ADMIN_USER`        | `_auth.py`                          | Usuario admin del dashboard               |
+| `ADMIN_PASSWORD`    | `_auth.py`                          | Hash de contraseña del admin              |
+| `ECOMMERCE_URL`     | `scraper.py`, `analytics.py`        | URL base del e-commerce (lentesplus.com)  |
+| `METABASE_MCP_URL`  | `promo.py`                          | URL MCP Metabase con api_key incluida     |
+| `ANTHROPIC_API_KEY` | `promo.py`                          | API Key Claude Haiku para análisis AI     |
 
 ---
 
-## ⚠️ Restricciones
-- NO hardcodear credenciales en ningún archivo del repositorio.
-- NO modificar archivos en `/src/` o `/api/*.py` (salvo `_auth.py` y `login.py`).
-- NO exponer el CSV directamente como endpoint sin autenticación.
+## ⚠️ Notas Importantes
+
+- **Vercel Hobby = 12 funciones.** Este límite ya está al tope. Consolidar antes de agregar.
+- **`/tmp/`** es la única ruta escribible en Vercel Serverless — usar para archivos que se actualizan (users.json).
+- **Electron** wrappea el frontend compilado en `/dist`. No tiene lógica de negocio propia — solo el main process que carga la URL local.
