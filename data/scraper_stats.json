@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 5,
-      "units_used": 7,
+      "calls": 6,
+      "units_used": 8,
       "history": [
+        {
+          "id": "scr_20260506194850",
+          "timestamp": "2026-05-06T19:48:50.286837Z",
+          "tipo_promo": "Precio tachado",
+          "sku": "31JJAC132",
+          "url": "https://www.lentesplus.com/cl/producto/acuvue-oasys-with-hydraluxe-1-day",
+          "elapsed_ms": 8565,
+          "units": 1,
+          "status": "ok",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506194839",
           "timestamp": "2026-05-06T19:48:39.309547Z",
