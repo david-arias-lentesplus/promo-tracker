@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 13,
-      "units_used": 15,
+      "calls": 14,
+      "units_used": 16,
       "history": [
+        {
+          "id": "scr_20260506195025",
+          "timestamp": "2026-05-06T19:50:25.320377Z",
+          "tipo_promo": "Precio tachado",
+          "sku": "31JJAC134",
+          "url": "https://www.lentesplus.com/cl/producto/acuvue-oasys-max-1-day",
+          "elapsed_ms": 10515,
+          "units": 1,
+          "status": "ok",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506195012",
           "timestamp": "2026-05-06T19:50:12.381975Z",
