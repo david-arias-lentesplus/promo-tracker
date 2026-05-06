@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 21,
-      "units_used": 27,
+      "calls": 22,
+      "units_used": 29,
       "history": [
+        {
+          "id": "scr_20260506195438",
+          "timestamp": "2026-05-06T19:54:38.364157Z",
+          "tipo_promo": "Tier Price",
+          "sku": "31ALPN102",
+          "url": "https://www.lentesplus.com/cl/producto/precision-1-para-astigmatismo",
+          "elapsed_ms": 46429,
+          "units": 2,
+          "status": "ok",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506195349",
           "timestamp": "2026-05-06T19:53:49.395705Z",
