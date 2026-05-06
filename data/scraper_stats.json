@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 32,
-      "units_used": 46,
+      "calls": 33,
+      "units_used": 48,
       "history": [
+        {
+          "id": "scr_20260506200051",
+          "timestamp": "2026-05-06T20:00:51.297657Z",
+          "tipo_promo": "Tier Price",
+          "sku": "21BLUT101",
+          "url": "https://www.lentesplus.com/co/producto/ultra",
+          "elapsed_ms": 30470,
+          "units": 2,
+          "status": "ok",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506200018",
           "timestamp": "2026-05-06T20:00:18.336367Z",
