@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 70,
-      "units_used": 114,
+      "calls": 71,
+      "units_used": 116,
       "history": [
+        {
+          "id": "scr_20260506202451",
+          "timestamp": "2026-05-06T20:24:51.728629Z",
+          "tipo_promo": "Tier Price",
+          "sku": "51JJAC119",
+          "url": "https://www.lentesplus.com/ar/producto/acuvue-oasys-para-astigmatismo-con-hydraclear-plus",
+          "elapsed_ms": 46023,
+          "units": 2,
+          "status": "ok",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506202402",
           "timestamp": "2026-05-06T20:24:02.833258Z",
