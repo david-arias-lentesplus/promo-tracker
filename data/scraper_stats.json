@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 35,
-      "units_used": 52,
+      "calls": 36,
+      "units_used": 53,
       "history": [
+        {
+          "id": "scr_20260506200227",
+          "timestamp": "2026-05-06T20:02:27.791005Z",
+          "tipo_promo": "Precio tachado",
+          "sku": "53AZAN102",
+          "url": "https://www.lentesplus.com/ar/producto/all-clean-soft-100-ml",
+          "elapsed_ms": 8288,
+          "units": 1,
+          "status": "warning",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506200216",
           "timestamp": "2026-05-06T20:02:17.008257Z",
