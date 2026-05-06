@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 22,
-      "units_used": 29,
+      "calls": 23,
+      "units_used": 32,
       "history": [
+        {
+          "id": "scr_20260506195542",
+          "timestamp": "2026-05-06T19:55:42.495122Z",
+          "tipo_promo": "Tier Price",
+          "sku": "31ALPN101",
+          "url": "https://www.lentesplus.com/cl/producto/precision-1",
+          "elapsed_ms": 61589,
+          "units": 3,
+          "status": "error",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506195438",
           "timestamp": "2026-05-06T19:54:38.364157Z",
