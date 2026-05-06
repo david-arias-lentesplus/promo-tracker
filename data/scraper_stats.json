@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 30,
-      "units_used": 43,
+      "calls": 31,
+      "units_used": 45,
       "history": [
+        {
+          "id": "scr_20260506200003",
+          "timestamp": "2026-05-06T20:00:04.000651Z",
+          "tipo_promo": "Tier Price",
+          "sku": "41JJAC125",
+          "url": "https://www.lentesplus.com/mx/producto/acuvue-vita-para-astigmatismo",
+          "elapsed_ms": 41107,
+          "units": 2,
+          "status": "ok",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506195920",
           "timestamp": "2026-05-06T19:59:20.242304Z",
