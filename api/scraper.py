@@ -862,7 +862,24 @@ def scrape_tier_price(page, url: str, expected_pct: float, qty_max: int, debug_m
         # ── Paso 1: Cargar página ─────────────────────────────────
         log(1, f'Cargando página del producto…')
         page.goto(url, wait_until='domcontentloaded', timeout=30000)
-        _safe_wait(page, 3000)  # React hydration
+
+        # Esperar a que la SPA (React) hidrate y cualquier redirect/404 se resuelva.
+        # Algunas páginas pasan por un 404 transitorio antes de llegar al producto real.
+        try:
+            page.wait_for_load_state('networkidle', timeout=12000)
+        except Exception:
+            pass
+        _safe_wait(page, 2000)  # margen extra para re-renders post-hydration
+
+        # Si aún parece un 404, dar 5 s más y volver a revisar (redirect tardío)
+        if _check_404(page):
+            log(1, '404 detectado — esperando posible redirect…', ok=False)
+            _safe_wait(page, 5000)
+            try:
+                page.wait_for_load_state('networkidle', timeout=8000)
+            except Exception:
+                pass
+
         try:
             title = page.title()
         except Exception as _te:
@@ -876,7 +893,7 @@ def scrape_tier_price(page, url: str, expected_pct: float, qty_max: int, debug_m
         log(1, f'Cargado: "{title}" | URL: {page.url}')
         snap('01_producto')
 
-        # Detectar 404 antes de continuar
+        # Detectar 404 definitivo (tras espera)
         err_404 = _check_404(page)
         if err_404:
             return {
@@ -1047,21 +1064,51 @@ def scrape_tier_price(page, url: str, expected_pct: float, qty_max: int, debug_m
 
         snap('05_carrito')
 
-        # ── Paso 5b: Esperar que el carrito cargue completamente ──
+        # ── Paso 5b: Cerrar modal cross-sell si aparece ───────────
+        # Algunas páginas muestran un popup de cross-sell tras agregar al carrito.
+        # Hay que cerrarlo para ver el carrito real con los precios correctos.
+        CROSSSELL_CLOSE_SELS = [
+            # Selector exacto provisto por inspección del DOM
+            '#root > main > div.main-page-ioz > div[class*="crosssell"] > div > div > button',
+            # Variantes resistentes a hash de CSS Modules
+            '[class*="crosssellRoot"] button',
+            '[class*="crosssell"] button[class*="close"]',
+            '[class*="crosssell"] button[aria-label*="close"]',
+            '[class*="crosssell"] button[aria-label*="cerrar"]',
+            '[class*="crossSell"] button',
+            '[class*="cross-sell"] button',
+        ]
+        _crosssell_closed = False
+        for _cs_sel in CROSSSELL_CLOSE_SELS:
+            try:
+                _cs_btn = page.query_selector(_cs_sel)
+                if _cs_btn and _cs_btn.is_visible():
+                    _cs_btn.click()
+                    _safe_wait(page, 1500)
+                    _crosssell_closed = True
+                    log(5, f'Modal cross-sell cerrado ✓ ({_cs_sel})')
+                    snap('05_crosssell_cerrado')
+                    break
+            except Exception:
+                continue
+        if not _crosssell_closed:
+            log(5, 'Sin modal cross-sell detectado')
+
+        # ── Paso 5c: Esperar que el carrito cargue completamente ──
         # La página es una SPA (React): los precios se renderizan de forma asíncrona.
         # 1) networkidle: esperar a que no haya peticiones de red pendientes
         try:
-            page.wait_for_load_state('networkidle', timeout=10000)
+            page.wait_for_load_state('networkidle', timeout=15000)
             log(5, 'Network idle ✓')
         except Exception:
             log(5, 'Network idle timeout — continuando de todas formas', ok=False)
 
-        # 2) wait_for_selector: intentar el selector de precio del ítem (el más confiable)
+        # 2) wait_for_selector: esperar a que aparezca algún elemento de precio
         price_sel_appeared = False
         for _sel in [CART_ITEM_PRICE_SEL, '[class*="product-price"]',
                      '[class*="priceSummary"]', '[class*="cartPage-items"]']:
             try:
-                page.wait_for_selector(_sel, timeout=6000)
+                page.wait_for_selector(_sel, timeout=8000)
                 log(5, f'Selector de precio visible: {_sel}')
                 price_sel_appeared = True
                 break
@@ -1069,9 +1116,11 @@ def scrape_tier_price(page, url: str, expected_pct: float, qty_max: int, debug_m
                 continue
 
         if not price_sel_appeared:
-            log(5, 'Ningún selector de precio apareció — esperando 4 s extra…', ok=False)
-            _safe_wait(page, 4000)
+            log(5, 'Ningún selector de precio apareció — esperando 6 s extra…', ok=False)
+            _safe_wait(page, 6000)
 
+        # 3) Espera extra para que el resumen (priceSummary) termine de renderizar
+        _safe_wait(page, 1500)
         snap('05_carrito_cargado')
 
         # ── Paso 6: Verificar que el carrito no está vacío ────────
@@ -1335,7 +1384,21 @@ def scrape_obsequios(page, url: str, qty_max: int, debug_mode: bool = False) -> 
         # ── Paso 1: Cargar página ──────────────────────────────────
         log(1, 'Cargando página del producto…')
         page.goto(url, wait_until='domcontentloaded', timeout=30000)
-        _safe_wait(page, 3000)
+        try:
+            page.wait_for_load_state('networkidle', timeout=12000)
+        except Exception:
+            pass
+        _safe_wait(page, 2000)
+
+        # Si es 404 transitorio, dar tiempo al redirect
+        if _check_404(page):
+            log(1, '404 detectado — esperando posible redirect…', ok=False)
+            _safe_wait(page, 5000)
+            try:
+                page.wait_for_load_state('networkidle', timeout=8000)
+            except Exception:
+                pass
+
         try:
             title_txt = page.title()
         except Exception as _te:
@@ -1349,7 +1412,7 @@ def scrape_obsequios(page, url: str, qty_max: int, debug_mode: bool = False) -> 
         log(1, f'Cargado: "{title_txt}"')
         snap('01_producto')
 
-        # Detectar 404 antes de continuar
+        # Detectar 404 definitivo (tras espera)
         err_404 = _check_404(page)
         if err_404:
             return {
@@ -1464,8 +1527,30 @@ def scrape_obsequios(page, url: str, qty_max: int, debug_mode: bool = False) -> 
         else:
             log(5, 'Ya en carrito ✓')
 
+        # ── Paso 5b: Cerrar modal cross-sell si aparece ───────────
+        _OBS_CS_SELS = [
+            '#root > main > div.main-page-ioz > div[class*="crosssell"] > div > div > button',
+            '[class*="crosssellRoot"] button',
+            '[class*="crosssell"] button[class*="close"]',
+            '[class*="crosssell"] button[aria-label*="close"]',
+            '[class*="crosssell"] button[aria-label*="cerrar"]',
+            '[class*="crossSell"] button',
+            '[class*="cross-sell"] button',
+        ]
+        for _cs_sel in _OBS_CS_SELS:
+            try:
+                _cs_btn = page.query_selector(_cs_sel)
+                if _cs_btn and _cs_btn.is_visible():
+                    _cs_btn.click()
+                    _safe_wait(page, 1500)
+                    log(5, f'Modal cross-sell cerrado ✓')
+                    snap('05_crosssell_cerrado')
+                    break
+            except Exception:
+                continue
+
         try:
-            page.wait_for_load_state('networkidle', timeout=10000)
+            page.wait_for_load_state('networkidle', timeout=15000)
         except Exception:
             pass
         _safe_wait(page, 2000)
