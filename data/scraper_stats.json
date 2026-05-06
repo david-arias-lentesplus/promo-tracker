@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 12,
-      "units_used": 14,
+      "calls": 13,
+      "units_used": 15,
       "history": [
+        {
+          "id": "scr_20260506195012",
+          "timestamp": "2026-05-06T19:50:12.381975Z",
+          "tipo_promo": "Precio tachado",
+          "sku": "31JJAC135",
+          "url": "https://www.lentesplus.com/cl/producto/acuvue-oasys-max-1-day-multifocal",
+          "elapsed_ms": 11967,
+          "units": 1,
+          "status": "ok",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506194957",
           "timestamp": "2026-05-06T19:49:57.969172Z",
