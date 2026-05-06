@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 42,
-      "units_used": 65,
+      "calls": 43,
+      "units_used": 67,
       "history": [
+        {
+          "id": "scr_20260506200728",
+          "timestamp": "2026-05-06T20:07:28.701613Z",
+          "tipo_promo": "Tier Price",
+          "sku": "51ALAO122",
+          "url": "https://www.lentesplus.com/ar/producto/air-optix-plus-hydraglyde-astigmatismo",
+          "elapsed_ms": 45585,
+          "units": 2,
+          "status": "ok",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506200639",
           "timestamp": "2026-05-06T20:06:40.044963Z",
