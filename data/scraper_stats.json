@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 46,
-      "units_used": 72,
+      "calls": 47,
+      "units_used": 75,
       "history": [
+        {
+          "id": "scr_20260506201033",
+          "timestamp": "2026-05-06T20:10:33.407103Z",
+          "tipo_promo": "Tier Price",
+          "sku": "51ALAO103",
+          "url": "https://www.lentesplus.com/ar/producto/air-optix-colors-formulados",
+          "elapsed_ms": 61532,
+          "units": 3,
+          "status": "error",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506200929",
           "timestamp": "2026-05-06T20:09:29.089158Z",
