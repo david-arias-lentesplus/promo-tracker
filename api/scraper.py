@@ -237,7 +237,15 @@ def _page_alive(page) -> bool:
 
 
 def _is_closed_err(e) -> bool:
-    """True si la excepción indica que el browser/page fue cerrado prematuramente."""
+    """True si la excepción indica que el browser/page fue cerrado prematuramente.
+
+    En modo local (Playwright Python directo) esto no debería ocurrir, así que
+    devuelve False para que el error se reporte normalmente y sea diagnosticable.
+    Solo retorna True en Vercel/Browserless, donde el contexto remoto puede cerrarse
+    por timeout de la plataforma.
+    """
+    if not _is_vercel():
+        return False  # Local: dejar que el error se propague como 'error' real
     msg = str(e).lower()
     return any(kw in msg for kw in [
         'target page, context or browser has been closed',
@@ -909,41 +917,40 @@ def scrape_tier_price(page, url: str, expected_pct: float, qty_max: int, debug_m
 
         snap('03_cantidad')
 
-        # ── Paso 3b: Detectar producto sin stock ─────────────────
-        OOS_PHRASES = [
-            'producto no disponible', 'agotado', 'sin stock',
-            'out of stock', 'no disponible', 'unavailable',
-        ]
-        try:
-            _oos_body = page.inner_text('body').lower()
-            for _phrase in OOS_PHRASES:
-                if _phrase in _oos_body:
-                    snap('03b_sin_stock')
-                    log(4, f'Producto sin stock detectado: "{_phrase}"', ok=False)
-                    return {
-                        'status':  'warning',
-                        'message': f'Producto no disponible (sin stock). Frase detectada: "{_phrase}".',
-                        'details': {
-                            'fields_filled': fields_filled,
-                            'qty':   final_qty,
-                            'steps': steps,
-                            'debug': {'screenshots': screenshots, 'page_url': page.url},
-                        },
-                    }
-        except Exception as _oos_e:
-            if _is_closed_err(_oos_e):
-                return {
-                    'status':  'warning',
-                    'message': 'Browserless cerró el contexto antes de completar la verificación.',
-                    'details': {'fields_filled': fields_filled, 'steps': steps},
-                }
-
-        # ── Paso 4: Click "Agregar a la bolsa" ───────────────────
+        # ── Paso 4: Click "Agregar a la bolsa" (con detección OOS por label) ───
         log(4, 'Buscando botón de agregar al carrito…')
         original_url = page.url
         add_btn = None
 
-        # Try text-based selectors first (most reliable)
+        # Textos que indican producto SIN STOCK — chequear el label del botón, no el body
+        OOS_BUTTON_TEXTS = [
+            'PRODUCTO NO DISPONIBLE', 'Producto no disponible',
+            'AGOTADO', 'Agotado',
+            'SIN STOCK', 'Sin stock',
+            'OUT OF STOCK', 'Out of stock',
+            'NO DISPONIBLE', 'No disponible',
+        ]
+        for oos_txt in OOS_BUTTON_TEXTS:
+            for _sp in [f'button:has-text("{oos_txt}")', f'[role="button"]:has-text("{oos_txt}")']:
+                try:
+                    _btn = page.query_selector(_sp)
+                    if _btn and _btn.is_visible():
+                        snap('04_sin_stock')
+                        log(4, f'Botón sin stock: "{oos_txt}"', ok=False)
+                        return {
+                            'status':  'warning',
+                            'message': f'Producto no disponible — el botón muestra: "{oos_txt}".',
+                            'details': {
+                                'fields_filled': fields_filled,
+                                'qty':   final_qty,
+                                'steps': steps,
+                                'debug': {'screenshots': screenshots, 'page_url': page.url},
+                            },
+                        }
+                except Exception:
+                    continue
+
+        # Buscar botón de agregar (texto)
         for txt in ADD_TO_BAG_TEXTS:
             for sel_pattern in [
                 f'button:has-text("{txt}")',
@@ -1373,39 +1380,37 @@ def scrape_obsequios(page, url: str, qty_max: int, debug_mode: bool = False) -> 
             final_qty = _click_plus_until_qty(page, qty_max, log_fn=log)
         snap('03_cantidad')
 
-        # ── Paso 3b: Detectar producto sin stock ─────────────────
-        _OOS_PHRASES = [
-            'producto no disponible', 'agotado', 'sin stock',
-            'out of stock', 'no disponible', 'unavailable',
-        ]
-        try:
-            _oos_body = page.inner_text('body').lower()
-            for _phrase in _OOS_PHRASES:
-                if _phrase in _oos_body:
-                    snap('03b_sin_stock')
-                    log(4, f'Producto sin stock: "{_phrase}"', ok=False)
-                    return {
-                        'status':  'warning',
-                        'message': f'Producto no disponible (sin stock). Frase detectada: "{_phrase}".',
-                        'details': {
-                            'fields_filled': fields_filled,
-                            'qty':   final_qty,
-                            'steps': steps,
-                            'debug': {'screenshots': screenshots, 'page_url': page.url},
-                        },
-                    }
-        except Exception as _oos_e:
-            if _is_closed_err(_oos_e):
-                return {
-                    'status':  'warning',
-                    'message': 'Browserless cerró el contexto antes de completar la verificación.',
-                    'details': {'fields_filled': fields_filled, 'steps': steps},
-                }
-
-        # ── Paso 4: Agregar al carrito ────────────────────────────
+        # ── Paso 4: Agregar al carrito (con detección OOS por label de botón) ────
         log(4, 'Buscando botón agregar al carrito…')
         original_url = page.url
         add_btn = None
+
+        # Primero chequear si el botón visible es de producto sin stock
+        _OOS_BTN_TEXTS = [
+            'PRODUCTO NO DISPONIBLE', 'Producto no disponible',
+            'AGOTADO', 'Agotado', 'SIN STOCK', 'Sin stock',
+            'OUT OF STOCK', 'Out of stock', 'NO DISPONIBLE', 'No disponible',
+        ]
+        for _oos_txt in _OOS_BTN_TEXTS:
+            for _sp in [f'button:has-text("{_oos_txt}")', f'[role="button"]:has-text("{_oos_txt}")']:
+                try:
+                    _btn = page.query_selector(_sp)
+                    if _btn and _btn.is_visible():
+                        snap('04_sin_stock')
+                        log(4, f'Botón sin stock: "{_oos_txt}"', ok=False)
+                        return {
+                            'status':  'warning',
+                            'message': f'Producto no disponible — el botón muestra: "{_oos_txt}".',
+                            'details': {
+                                'fields_filled': fields_filled,
+                                'qty':   final_qty,
+                                'steps': steps,
+                                'debug': {'screenshots': screenshots, 'page_url': page.url},
+                            },
+                        }
+                except Exception:
+                    continue
+
         for txt in ADD_TO_BAG_TEXTS:
             for sp in [f'button:has-text("{txt}")', f'[role="button"]:has-text("{txt}")']:
                 try:
