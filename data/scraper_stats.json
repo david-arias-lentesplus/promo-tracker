@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 50,
-      "units_used": 79,
+      "calls": 51,
+      "units_used": 81,
       "history": [
+        {
+          "id": "scr_20260506201233",
+          "timestamp": "2026-05-06T20:12:33.560088Z",
+          "tipo_promo": "Obsequios",
+          "sku": "23BLRE109",
+          "url": "https://www.lentesplus.com/co/producto/renu-advance-355-ml",
+          "elapsed_ms": 30852,
+          "units": 2,
+          "status": "warning",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506201159",
           "timestamp": "2026-05-06T20:11:59.964082Z",
