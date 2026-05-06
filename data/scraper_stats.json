@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 43,
-      "units_used": 67,
+      "calls": 44,
+      "units_used": 69,
       "history": [
+        {
+          "id": "scr_20260506200815",
+          "timestamp": "2026-05-06T20:08:15.466390Z",
+          "tipo_promo": "Tier Price",
+          "sku": "51ALAO123",
+          "url": "https://www.lentesplus.com/ar/producto/air-optix-plus-hydraglyde-multifocal",
+          "elapsed_ms": 44193,
+          "units": 2,
+          "status": "ok",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506200728",
           "timestamp": "2026-05-06T20:07:28.701613Z",
