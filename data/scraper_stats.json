@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 16,
-      "units_used": 18,
+      "calls": 17,
+      "units_used": 19,
       "history": [
+        {
+          "id": "scr_20260506195058",
+          "timestamp": "2026-05-06T19:50:58.231889Z",
+          "tipo_promo": "Precio tachado",
+          "sku": "21ALAO106",
+          "url": "https://www.lentesplus.com/co/producto/air-optix-colors-neutros",
+          "elapsed_ms": 8170,
+          "units": 1,
+          "status": "ok",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506195047",
           "timestamp": "2026-05-06T19:50:47.757385Z",
