@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 65,
-      "units_used": 104,
+      "calls": 66,
+      "units_used": 106,
       "history": [
+        {
+          "id": "scr_20260506202128",
+          "timestamp": "2026-05-06T20:21:28.659529Z",
+          "tipo_promo": "Tier Price",
+          "sku": "51JJAC339",
+          "url": "https://www.lentesplus.com/ar/producto/acuvue-oasys-1-day-con-hydraluxe",
+          "elapsed_ms": 36724,
+          "units": 2,
+          "status": "ok",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506202049",
           "timestamp": "2026-05-06T20:20:49.198184Z",
