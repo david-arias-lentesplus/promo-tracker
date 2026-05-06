@@ -144,6 +144,7 @@ FORMULA_FIELDS = [
     ('Eje (Axis)',     'select-Eje(Axis)-izq'),
     ('Adición (Add)',  'select-Adición(Add)-izq'),
     ('Dominance (Dom)','select-Dominance(Dom)-izq'),
+    ('Color',          'select-Color-izq'),
 ]
 
 QTY_PLUS_SELECTORS = [
@@ -182,6 +183,16 @@ CART_SUMMARY_SELECTORS = [
 # Selector para el descuento en promos de tipo bundle (Lleve X Pague Y, 50% 2a caja, etc.)
 # El elemento contiene el monto descontado ya calculado en el resumen del carrito.
 CART_DISCOUNT_LABEL_SELS = [
+    # Selector exacto provisto por inspección del DOM (más confiable)
+    (
+        "#root > main > div.main-page-ioz > div > "
+        "div.cartPage-body-i6u > div.cartPage-summary_container-n-G > "
+        "div > div.priceSummary-root-95j > div.priceSummary-lineItems-hPQ > "
+        "span.priceSummary-discountQuantity-n4c.priceSummary-totalQuantity-qta"
+        ".priceSummary-lineItemLabel-jm6"
+    ),
+    # Variantes con class* (resistentes a hash de CSS Modules)
+    '[class*="priceSummary-lineItems"] [class*="priceSummary-discountQuantity"]',
     '[class*="priceSummary-discountQuantity"]',
     '[class*="discountQuantity"]',
     '[class*="priceSummary"] [class*="lineItems"] [class*="discount"]',
@@ -580,11 +591,18 @@ def _parse_labeled_prices(raw: str) -> dict:
 CART_ITEM_PRICE_SEL = (
     "#root > main > div.main-page-ioz > div > "
     "div.cartPage-body-i6u > div.cartPage-items_container-GWu > "
-    "ul > li:nth-child(1) > div.product-details-pck > span.product-price-bEh"
+    "ul > li > div.product-details-pck > span.product-price-bEh"
 )
 CART_ITEM_PRICE_FALLBACKS = [
     CART_ITEM_PRICE_SEL,
+    # variante con :nth-child(1) por compatibilidad
+    (
+        "#root > main > div.main-page-ioz > div > "
+        "div.cartPage-body-i6u > div.cartPage-items_container-GWu > "
+        "ul > li:nth-child(1) > div.product-details-pck > span.product-price-bEh"
+    ),
     '[class*="cartPage-items"] li:first-child [class*="product-price"]',
+    'div[class*="items_container"] li [class*="product-price"]',
     '[class*="items_container"] li:first-child [class*="price"]',
     '[class*="cartItem"] [class*="price"]:first-child',
     '[class*="cart-item"] [class*="price"]:first-child',
@@ -1830,6 +1848,24 @@ class handler(BaseHTTPRequestHandler):
         expected_pct = float(body.get('desc_pct', 0) or 0)
         qty_max_raw  = str(body.get('qty_max_promo', '1') or '1').strip()
         debug_mode   = bool(body.get('debug', False))
+
+        # ── Aplicar URL override del backend (tiene prioridad sobre lo que manda el frontend) ──
+        # Esto garantiza que el scraper siempre use la URL corregida, incluso si el frontend
+        # envía la URL antigua (ej: si el tab de Auditoría se cargó antes de guardar el override).
+        if sku:
+            try:
+                from _auth import load_url_overrides as _load_ovr
+                _ovrs = _load_ovr()
+                _ovr_url = (
+                    _ovrs.get(sku) or
+                    _ovrs.get(sku.upper()) or
+                    _ovrs.get(sku.lower())
+                )
+                if _ovr_url:
+                    print(f'  [scraper] URL override aplicado para {sku}: {_ovr_url[:80]}')
+                    url = _ovr_url
+            except Exception as _e:
+                print(f'  [scraper] Warning: no se pudo cargar url_overrides: {_e}')
 
         # Extraer solo dígitos de qty_max_promo (puede venir como "4", "4 cajas", etc.)
         qty_digits = re.sub(r'\D', '', qty_max_raw)
