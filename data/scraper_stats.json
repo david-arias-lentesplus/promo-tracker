@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 54,
-      "units_used": 84,
+      "calls": 55,
+      "units_used": 85,
       "history": [
+        {
+          "id": "scr_20260506201424",
+          "timestamp": "2026-05-06T20:14:25.003512Z",
+          "tipo_promo": "Obsequios",
+          "sku": "21BLUT101",
+          "url": "https://www.lentesplus.com/co/producto/ultra",
+          "elapsed_ms": 28281,
+          "units": 1,
+          "status": "warning",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506201353",
           "timestamp": "2026-05-06T20:13:54.100266Z",
