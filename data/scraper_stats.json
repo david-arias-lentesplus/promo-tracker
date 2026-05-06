@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 25,
-      "units_used": 37,
+      "calls": 26,
+      "units_used": 39,
       "history": [
+        {
+          "id": "scr_20260506195809",
+          "timestamp": "2026-05-06T19:58:09.583182Z",
+          "tipo_promo": "Tier Price",
+          "sku": "41JJAC120",
+          "url": "https://www.lentesplus.com/mx/producto/acuvue-oasys",
+          "elapsed_ms": 30665,
+          "units": 2,
+          "status": "ok",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506195736",
           "timestamp": "2026-05-06T19:57:36.458151Z",
