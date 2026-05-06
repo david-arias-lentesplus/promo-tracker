@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 33,
-      "units_used": 48,
+      "calls": 34,
+      "units_used": 50,
       "history": [
+        {
+          "id": "scr_20260506200136",
+          "timestamp": "2026-05-06T20:01:36.734370Z",
+          "tipo_promo": "Tier Price",
+          "sku": "21BLUT102",
+          "url": "https://www.lentesplus.com/co/producto/ultra-astigmatismo",
+          "elapsed_ms": 42751,
+          "units": 2,
+          "status": "ok",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506200051",
           "timestamp": "2026-05-06T20:00:51.297657Z",
