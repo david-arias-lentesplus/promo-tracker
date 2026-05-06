@@ -72,7 +72,8 @@
         "includeFiles": [
           "api/_*.py",
           "data/url_sku_images.csv",
-          "data/sku_use_data.csv"
+          "data/sku_use_data.csv",
+          "data/url_overrides.json"
         ]
       }
     },
@@ -139,7 +140,7 @@
         },
         {
           "key": "Access-Control-Allow-Methods",
-          "value": "GET, POST, OPTIONS"
+          "value": "GET, POST, PUT, PATCH, DELETE, OPTIONS"
         },
         {
           "key": "Access-Control-Allow-Headers",
