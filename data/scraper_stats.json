@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 9,
-      "units_used": 11,
+      "calls": 10,
+      "units_used": 12,
       "history": [
+        {
+          "id": "scr_20260506194934",
+          "timestamp": "2026-05-06T19:49:34.191375Z",
+          "tipo_promo": "Precio tachado",
+          "sku": "31JJAC125",
+          "url": "https://www.lentesplus.com/cl/producto/acuvue-vita-para-astigmatismo",
+          "elapsed_ms": 9234,
+          "units": 1,
+          "status": "ok",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506194922",
           "timestamp": "2026-05-06T19:49:22.585399Z",
