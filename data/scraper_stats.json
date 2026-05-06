@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 4,
-      "units_used": 6,
+      "calls": 5,
+      "units_used": 7,
       "history": [
+        {
+          "id": "scr_20260506194839",
+          "timestamp": "2026-05-06T19:48:39.309547Z",
+          "tipo_promo": "Precio tachado",
+          "sku": "31JJAC122",
+          "url": "https://www.lentesplus.com/cl/producto/1-day-acuvue-moist",
+          "elapsed_ms": 7429,
+          "units": 1,
+          "status": "ok",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506194829",
           "timestamp": "2026-05-06T19:48:29.487165Z",
