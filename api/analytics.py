@@ -1,15 +1,11 @@
 """
 📄 /api/analytics.py  — Lista de productos para auditoría de promos
-GET /api/analytics?country=CO&date_from=&date_to=
-                  &status=&fabricante=&tipo_promo=&product_type=
-                  &page=1&limit=50&search=
-
-Retorna lista paginada de productos con:
-  imagen, nombre, product_url, sku, status, fabricante,
-  promo_marca, tipo_promo, tipo_campana, date_start, date_end,
-  days_remaining, total_desc_pct, pais
+GET  /api/analytics?...                  → lista paginada de productos
+GET  /api/analytics?mode=url_overrides   → {sku: url} de sobreescrituras activas
+PATCH /api/analytics  {sku, url}         → guarda/actualiza override de URL
+DELETE /api/analytics?sku=XXX            → elimina override de URL
 """
-import sys, os
+import sys, os, json
 _API_DIR = os.path.dirname(os.path.abspath(__file__))
 if _API_DIR not in sys.path:
     sys.path.insert(0, _API_DIR)
@@ -17,7 +13,7 @@ if _API_DIR not in sys.path:
 import time
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
-from _auth         import validate_token, json_response
+from _auth         import validate_token, json_response, load_url_overrides, save_url_overrides
 from _data_service import (fetch_csv_text, load_image_map, parse_csv,
                            apply_filters, strip_internal,
                            get_unique_types)
@@ -50,14 +46,69 @@ class handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self.send_response(200)
         self.send_header('Access-Control-Allow-Origin',  '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        self.send_header('Access-Control-Allow-Methods', 'GET, PATCH, DELETE, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Authorization, Content-Type')
         self.end_headers()
+
+    # ── PATCH: guardar override de URL ─────────────────────────────
+    def do_PATCH(self):
+        is_valid, msg = validate_token(dict(self.headers))
+        if not is_valid:
+            return json_response(self, 401, {'status': 'error', 'message': msg})
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            body   = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
+        except Exception:
+            return json_response(self, 400, {'status': 'error', 'message': 'JSON inválido'})
+
+        sku = (body.get('sku') or '').strip()
+        url = (body.get('url') or '').strip()
+        if not sku:
+            return json_response(self, 400, {'status': 'error', 'message': 'Campo sku requerido'})
+        if not url:
+            return json_response(self, 400, {'status': 'error', 'message': 'Campo url requerido'})
+
+        overrides = load_url_overrides()
+        overrides[sku] = url
+        save_url_overrides(overrides)
+        return json_response(self, 200, {'status': 'ok', 'sku': sku, 'url': url,
+                                         'total_overrides': len(overrides)})
+
+    # ── DELETE: eliminar override de URL ───────────────────────────
+    def do_DELETE(self):
+        is_valid, msg = validate_token(dict(self.headers))
+        if not is_valid:
+            return json_response(self, 401, {'status': 'error', 'message': msg})
+
+        qs  = parse_qs(urlparse(self.path).query)
+        sku = qs.get('sku', [''])[0].strip()
+        if not sku:
+            return json_response(self, 400, {'status': 'error', 'message': 'Query param sku requerido'})
+
+        overrides = load_url_overrides()
+        removed = False
+        for key in [sku, sku.upper(), sku.lower()]:
+            if key in overrides:
+                del overrides[key]
+                removed = True
+        if removed:
+            save_url_overrides(overrides)
+        return json_response(self, 200, {'status': 'ok', 'removed': removed,
+                                         'total_overrides': len(overrides)})
 
     def do_GET(self):
         is_valid, msg = validate_token(dict(self.headers))
         if not is_valid:
             return json_response(self, 401, {'status': 'error', 'message': msg})
+
+        qs   = parse_qs(urlparse(self.path).query)
+        mode = qs.get('mode', [''])[0].strip()
+
+        # Fast path: retornar solo los overrides activos
+        if mode == 'url_overrides':
+            overrides = load_url_overrides()
+            return json_response(self, 200, {'status': 'ok', 'overrides': overrides,
+                                             'total': len(overrides)})
 
         qs           = parse_qs(urlparse(self.path).query)
         country      = qs.get('country',      [''])[0].strip()

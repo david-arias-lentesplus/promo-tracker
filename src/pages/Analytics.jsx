@@ -8,6 +8,11 @@ import { apiRequest } from '@utils/api'
 import { useFilters }  from '@context/FiltersContext'
 
 // ─── Icons ─────────────────────────────────────────────────────────
+const IconEdit    = ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+const IconTrash   = ({ s=13 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+const IconSave    = ({ s=13 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+const IconBug     = ({ s=15 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2l1.88 1.88"/><path d="M14.12 3.88 16 2"/><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6z"/><path d="M12 20v-9"/><path d="M6.53 9C4.6 8.8 3 7.1 3 5"/><path d="M6 13H2"/><path d="M3 21c0-2.1 1.7-3.9 3.8-4"/><path d="M20.97 5c0 2.1-1.6 3.8-3.5 4"/><path d="M22 13h-4"/><path d="M17.2 17c2.1.1 3.8 1.9 3.8 4"/></svg>
+// ─── end extra icons
 const IconSearch      = ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
 const IconCheck       = ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
 const IconX           = ({ s=14 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -934,11 +939,13 @@ export default function Analytics() {
 
   const nSelected = selectedKeys.size
 
+  const [activeTab, setActiveTab] = useState('audit')  // 'audit' | 'debug'
+
   return (
     <div>
       <PageLoader show={loading} />
       {/* Header */}
-      <div className="flex items-start justify-between mb-5 gap-4">
+      <div className="flex items-start justify-between mb-4 gap-4">
         <div>
           <h1 className="text-2xl font-black text-gray-900 tracking-tight">Analytics</h1>
           <p className="text-sm text-gray-500 mt-0.5">
@@ -952,6 +959,26 @@ export default function Analytics() {
           {verifErr  > 0 && <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-100 text-red-700 text-xs font-bold"><IconX s={12}/>{verifErr} Error</span>}
         </div>
       </div>
+
+      {/* Tab switcher */}
+      <div className="flex items-center gap-1 mb-4 bg-gray-100 rounded-xl p-1 w-fit">
+        <button
+          onClick={() => setActiveTab('audit')}
+          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all
+            ${activeTab === 'audit' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+          <IconZap s={13}/> Auditoría
+        </button>
+        <button
+          onClick={() => setActiveTab('debug')}
+          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all
+            ${activeTab === 'debug' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+          <IconBug s={14}/> Product Debug
+        </button>
+      </div>
+
+      {activeTab === 'debug' && <ProductDebugTab />}
+
+      {activeTab === 'audit' && <>
 
       {/* Browserless usage bar + progreso */}
       <BrowserlessBar
@@ -1224,6 +1251,311 @@ export default function Analytics() {
           </div>
         )}
       </div>
+
+      </>} {/* end activeTab === 'audit' */}
+    </div>
+  )
+}
+
+
+// ─── ProductDebugTab ──────────────────────────────────────────────────────────
+
+function ProductDebugTab() {
+  const [rows,     setRows]     = useState([])
+  const [loading,  setLoading]  = useState(true)
+  const [overrides,setOverrides]= useState({})  // {sku: url}
+  const [editSku,  setEditSku]  = useState(null) // sku currently being edited
+  const [editVal,  setEditVal]  = useState('')
+  const [saving,   setSaving]   = useState(false)
+  const [search,   setSearch]   = useState('')
+  const [filter,   setFilter]   = useState('all') // 'all' | 'no_url' | 'overridden'
+  const [toast,    setToast]    = useState(null)
+
+  function showToast(msg, ok = true) {
+    setToast({ msg, ok })
+    setTimeout(() => setToast(null), 2800)
+  }
+
+  // Load products (limit=500, no filters) + active overrides
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      setLoading(true)
+      try {
+        const [prodRes, ovRes] = await Promise.all([
+          apiRequest('/analytics?limit=500&page=1'),
+          apiRequest('/analytics?mode=url_overrides'),
+        ])
+        if (cancelled) return
+        setRows(prodRes.data || [])
+        setOverrides(ovRes.overrides || {})
+      } catch (e) {
+        console.error('[ProductDebug] load error', e)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [])
+
+  function startEdit(row) {
+    setEditSku(row.sku)
+    setEditVal(overrides[row.sku] || row.product_url || '')
+  }
+
+  function cancelEdit() {
+    setEditSku(null)
+    setEditVal('')
+  }
+
+  async function saveOverride(sku) {
+    const url = editVal.trim()
+    if (!url) return
+    setSaving(true)
+    try {
+      await apiRequest('/analytics', {
+        method: 'PATCH',
+        body: JSON.stringify({ sku, url }),
+      })
+      setOverrides(prev => ({ ...prev, [sku]: url }))
+      // Also update the row's product_url for visual feedback
+      setRows(prev => prev.map(r => r.sku === sku ? { ...r, product_url: url } : r))
+      setEditSku(null)
+      showToast(`URL actualizada para ${sku}`)
+    } catch (e) {
+      showToast('Error al guardar override', false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function removeOverride(sku) {
+    setSaving(true)
+    try {
+      await apiRequest(`/analytics?sku=${encodeURIComponent(sku)}`, { method: 'DELETE' })
+      const next = { ...overrides }
+      delete next[sku]
+      setOverrides(next)
+      showToast(`Override eliminado para ${sku}`)
+    } catch (e) {
+      showToast('Error al eliminar override', false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Filter + search
+  const visible = useMemo(() => {
+    let out = rows
+    if (filter === 'no_url')    out = out.filter(r => !r.product_url)
+    if (filter === 'overridden') out = out.filter(r => overrides[r.sku])
+    if (search) {
+      const q = search.toLowerCase()
+      out = out.filter(r =>
+        (r.sku || '').toLowerCase().includes(q) ||
+        (r.product_name || '').toLowerCase().includes(q) ||
+        (r.product_url || '').toLowerCase().includes(q)
+      )
+    }
+    return out
+  }, [rows, filter, search, overrides])
+
+  const noUrlCount      = rows.filter(r => !r.product_url).length
+  const overriddenCount = Object.keys(overrides).length
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-xl shadow-lg text-sm font-semibold
+          ${toast.ok ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
+          {toast.msg}
+        </div>
+      )}
+
+      {/* Toolbar */}
+      <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-1 min-w-[200px]">
+          <IconSearch s={14} />
+          <input
+            type="text"
+            placeholder="Buscar SKU, nombre o URL…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="flex-1 text-sm outline-none placeholder-gray-400 text-gray-700"
+          />
+        </div>
+        <div className="flex items-center gap-1">
+          {[
+            { id: 'all',       label: `Todos (${rows.length})` },
+            { id: 'no_url',    label: `Sin URL (${noUrlCount})` },
+            { id: 'overridden',label: `Con override (${overriddenCount})` },
+          ].map(f => (
+            <button key={f.id} onClick={() => setFilter(f.id)}
+              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors
+                ${filter === f.id ? 'bg-[#0000E1] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Table */}
+      {loading ? (
+        <div className="flex items-center justify-center py-16 text-gray-400 text-sm gap-2">
+          <IconLoader s={16} /> Cargando productos…
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-100">
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide w-[100px]">SKU</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Producto</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide w-[60px]">País</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">URL actual</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide w-[120px]">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {visible.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-400">
+                    No hay productos que coincidan con el filtro
+                  </td>
+                </tr>
+              )}
+              {visible.map(row => {
+                const isEditing  = editSku === row.sku
+                const hasOverride = !!overrides[row.sku]
+                const hasUrl     = !!row.product_url
+
+                return (
+                  <tr key={`${row.sku}-${row.pais}`}
+                    className="hover:bg-gray-50/60 transition-colors">
+
+                    {/* SKU */}
+                    <td className="px-4 py-2.5">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-mono text-[11px] text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">
+                          {row.sku}
+                        </span>
+                        {hasOverride && (
+                          <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                            Override
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Nombre */}
+                    <td className="px-4 py-2.5 max-w-[220px]">
+                      <p className="text-xs text-gray-800 line-clamp-2">{row.product_name || '—'}</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">{row.fabricante || ''}</p>
+                    </td>
+
+                    {/* País */}
+                    <td className="px-4 py-2.5">
+                      <span className="text-[11px] font-semibold text-gray-500">{row.pais || '—'}</span>
+                    </td>
+
+                    {/* URL */}
+                    <td className="px-4 py-2.5 max-w-[340px]">
+                      {isEditing ? (
+                        <input
+                          autoFocus
+                          type="url"
+                          value={editVal}
+                          onChange={e => setEditVal(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter')  saveOverride(row.sku)
+                            if (e.key === 'Escape') cancelEdit()
+                          }}
+                          className="w-full text-xs px-2 py-1.5 border border-[#0000E1] rounded-lg outline-none
+                                     font-mono text-gray-700 bg-blue-50"
+                          placeholder="https://…"
+                        />
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          {hasUrl ? (
+                            <a href={row.product_url} target="_blank" rel="noopener noreferrer"
+                               className="text-[11px] text-[#0000E1] hover:underline font-mono truncate block max-w-[300px]"
+                               title={row.product_url}>
+                              {row.product_url}
+                            </a>
+                          ) : (
+                            <span className="text-[11px] text-red-500 font-semibold flex items-center gap-1">
+                              <IconAlert s={11}/> Sin URL
+                            </span>
+                          )}
+                          {hasUrl && (
+                            <a href={row.product_url} target="_blank" rel="noopener noreferrer"
+                               className="text-gray-300 hover:text-[#0000E1] flex-shrink-0">
+                              <IconExternal s={10}/>
+                            </a>
+                          )}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Acciones */}
+                    <td className="px-4 py-2.5">
+                      {isEditing ? (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            disabled={saving}
+                            onClick={() => saveOverride(row.sku)}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#0000E1] text-white
+                                       text-[11px] font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                            <IconSave s={11}/> Guardar
+                          </button>
+                          <button onClick={cancelEdit}
+                            className="px-2 py-1 rounded-lg bg-gray-100 text-gray-600
+                                       text-[11px] font-semibold hover:bg-gray-200 transition-colors">
+                            <IconX s={11}/>
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <button onClick={() => startEdit(row)}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-100 text-gray-600
+                                       text-[11px] font-semibold hover:bg-gray-200 transition-colors">
+                            <IconEdit s={11}/> Editar
+                          </button>
+                          {hasOverride && (
+                            <button
+                              disabled={saving}
+                              onClick={() => removeOverride(row.sku)}
+                              title="Eliminar override — volver al CSV original"
+                              className="p-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100
+                                         transition-colors disabled:opacity-50">
+                              <IconTrash s={11}/>
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Footer */}
+      {!loading && (
+        <div className="px-5 py-2.5 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
+          <p className="text-xs text-gray-500">
+            {visible.length} producto{visible.length !== 1 ? 's' : ''} mostrados
+            {overriddenCount > 0 && <> · <span className="text-amber-600 font-semibold">{overriddenCount} con override</span></>}
+          </p>
+          <p className="text-[10px] text-gray-400">
+            Los cambios aplican al siguiente scraping de cada producto
+          </p>
+        </div>
+      )}
     </div>
   )
 }

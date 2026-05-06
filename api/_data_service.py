@@ -5,6 +5,7 @@ Importado por raw_data.py, stats.py y otros endpoints.
 """
 import csv, io, os, re, urllib.request
 from datetime import datetime, date as _date
+from _auth import load_url_overrides
 
 try:
     import requests as _requests
@@ -192,6 +193,9 @@ def parse_csv(raw_text: str, image_map: dict) -> list:
     if not _USE_LOADED:
         load_use_data()
 
+    # Cargar sobreescrituras de URL una sola vez por llamada
+    _url_overrides = load_url_overrides()
+
     reader  = csv.DictReader(io.StringIO(raw_text, newline=''))
     records = []
     for i, row in enumerate(reader):
@@ -224,6 +228,16 @@ def parse_csv(raw_text: str, image_map: dict) -> list:
             or url_map.get(sku.lower())
             or ''
         ) if sku else ''
+
+        # Aplicar override si existe (tiene prioridad sobre el CSV)
+        if sku and _url_overrides:
+            override = (
+                _url_overrides.get(sku)
+                or _url_overrides.get(sku.upper())
+                or _url_overrides.get(sku.lower())
+            )
+            if override:
+                prod_url = override
 
         disc_raw   = _parse_discount(row.get('Total descuentos', 0))
         bu         = str(row.get('Business Unit', '')).strip()

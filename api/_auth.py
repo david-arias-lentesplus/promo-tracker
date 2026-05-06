@@ -374,6 +374,51 @@ def save_scraper_stats(stats: dict) -> tuple[bool, str]:
         return False, 'error'
 
 
+# ── URL Overrides ─────────────────────────────────────────────
+#  Mapa {sku → product_url} que permite sobrescribir URLs incorrectas del CSV.
+#  Se persiste en data/url_overrides.json (commit) y /tmp/url_overrides.json
+#  (efímero, mismo Lambda).  /tmp tiene prioridad para reflejar cambios en caliente.
+
+def _overrides_data_path() -> str:
+    base = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base, '..', 'data', 'url_overrides.json')
+
+
+def load_url_overrides() -> dict:
+    """Retorna {sku: url} con las sobreescrituras guardadas."""
+    if os.path.exists('/tmp/url_overrides.json'):
+        try:
+            with open('/tmp/url_overrides.json', 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    try:
+        with open(_overrides_data_path(), 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def save_url_overrides(overrides: dict) -> bool:
+    """Guarda los overrides en /tmp (inmediato) y en data/ (persistente si es posible)."""
+    # /tmp: siempre intentar (Lambda-warm)
+    try:
+        with open('/tmp/url_overrides.json', 'w', encoding='utf-8') as f:
+            json.dump(overrides, f, ensure_ascii=False)
+    except Exception as e:
+        print(f"[_auth] url_overrides /tmp save error: {e}")
+        return False
+
+    # data/: intentar, ignorar si no se puede escribir (Vercel read-only)
+    try:
+        with open(_overrides_data_path(), 'w', encoding='utf-8') as f:
+            json.dump(overrides, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass  # /tmp es suficiente para la sesión
+
+    return True
+
+
 # ── JSON response helper ──────────────────────────────────────
 
 def json_response(handler, status: int, body: dict):

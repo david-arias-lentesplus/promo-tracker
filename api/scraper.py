@@ -179,10 +179,72 @@ CART_SUMMARY_SELECTORS = [
     '[class*="cart"] [class*="total"]',
 ]
 
+# Selector para el descuento en promos de tipo bundle (Lleve X Pague Y, 50% 2a caja, etc.)
+# El elemento contiene el monto descontado ya calculado en el resumen del carrito.
+CART_DISCOUNT_LABEL_SELS = [
+    '[class*="priceSummary-discountQuantity"]',
+    '[class*="discountQuantity"]',
+    '[class*="priceSummary"] [class*="lineItems"] [class*="discount"]',
+    '[class*="priceSummary"] span[class*="discount"]',
+]
+
 CART_EMPTY_PHRASES = [
     'tu bolsa de compras está vacía', 'bolsa vacía', 'carrito vacío',
     'your cart is empty', 'tu carrito está vacío',
 ]
+
+
+def _safe_wait(page, ms: int):
+    """
+    Wrapper de page.wait_for_timeout que sobrevive un browser/page cerrado.
+    Si el contexto ya se cerró, duerme el hilo sin lanzar excepción.
+    """
+    try:
+        page.wait_for_timeout(ms)
+    except Exception:
+        import time as _t
+        _t.sleep(ms / 1000)
+
+
+def _page_alive(page) -> bool:
+    """Retorna True si la página sigue respondiendo."""
+    try:
+        page.title()
+        return True
+    except Exception:
+        return False
+
+
+def _check_404(page) -> str | None:
+    """
+    Retorna mensaje de error si la página es 404, None si todo está bien.
+    Detecta: título con '404', URL con '/404', o texto de cuerpo típico.
+    """
+    try:
+        title = page.title().lower()
+        url   = page.url
+        body  = ''
+        try:
+            body = page.inner_text('body')[:600].lower()
+        except Exception:
+            pass
+        is_404 = (
+            '404' in title
+            or 'not found' in title
+            or '/404' in url
+            or 'page not found' in body
+            or 'página no encontrada' in body
+            or 'no se encontró la página' in body
+            or 'oops' in title
+        )
+        if is_404:
+            return (
+                '🔗 URL no encontrada (404). '
+                'Actualiza la URL del producto en la sección Product Debug.'
+            )
+    except Exception:
+        pass
+    return None
 
 
 def _snap(page, debug_mode: bool) -> str | None:
@@ -628,6 +690,32 @@ def _extract_cart_discount_v2(page) -> dict:
     labeled  = _parse_labeled_prices(summary_raw)
     disc_amt = labeled['discount_amount']
 
+    # ── 3b. Selector específico de monto de descuento (bundle promos) ────
+    # El elemento priceSummary-discountQuantity contiene el monto descontado
+    # ya calculado por el sitio (ej: "- $45.000" en "Lleve 6 Pague 3", "50% 2a caja").
+    disc_label_amount = None
+    disc_label_raw    = ''
+    for sel in CART_DISCOUNT_LABEL_SELS:
+        try:
+            el = page.query_selector(sel)
+            if el:
+                raw_txt = el.inner_text().strip()
+                if raw_txt:
+                    disc_label_raw = raw_txt
+                    p = _clean_price(raw_txt)
+                    if p and p > 0:
+                        disc_label_amount = p
+                        break
+        except Exception:
+            continue
+
+    if disc_label_amount:
+        result['_disc_label_raw']    = disc_label_raw
+        result['_disc_label_amount'] = disc_label_amount
+        # Si no tenemos disc_amt de etiqueta textual, usamos el del selector directo
+        if not disc_amt:
+            disc_amt = disc_label_amount
+
     # ── 4. Registrar todos los precios encontrados (debug) ───────────────
     all_prices = []
     if subtotal:  all_prices.append(subtotal)
@@ -686,10 +774,19 @@ def scrape_tier_price(page, url: str, expected_pct: float, qty_max: int, debug_m
         # ── Paso 1: Cargar página ─────────────────────────────────
         log(1, f'Cargando página del producto…')
         page.goto(url, wait_until='domcontentloaded', timeout=30000)
-        page.wait_for_timeout(3000)  # React hydration
+        _safe_wait(page, 3000)  # React hydration
         title = page.title()
         log(1, f'Cargado: "{title}" | URL: {page.url}')
         snap('01_producto')
+
+        # Detectar 404 antes de continuar
+        err_404 = _check_404(page)
+        if err_404:
+            return {
+                'status':  'error',
+                'message': err_404,
+                'details': {'page_url': page.url, 'page_title': title, 'steps': steps},
+            }
 
         # ── Paso 2: Detectar y completar campos de fórmula ───────
         log(2, 'Buscando campos de prescripción…')
@@ -716,7 +813,7 @@ def scrape_tier_price(page, url: str, expected_pct: float, qty_max: int, debug_m
 
         snap('02_campos_llenos')
         log(2, f'{len(fields_filled)} de {len(FORMULA_FIELDS)} campos completados')
-        page.wait_for_timeout(500)
+        _safe_wait(page, 500)
 
         # ── Paso 3: Ajustar cantidad ──────────────────────────────
         log(3, f'Ajustando cantidad a {qty_max}…')
@@ -804,7 +901,7 @@ def scrape_tier_price(page, url: str, expected_pct: float, qty_max: int, debug_m
             except Exception:
                 log(4, 'URL no cambió, verificando si hay mini-cart activo…', ok=False)
 
-        page.wait_for_timeout(2500)
+        _safe_wait(page, 2500)
         snap('04_post_click')
 
         # ── Paso 5: Asegurar que estamos en el carrito ────────────
@@ -855,7 +952,7 @@ def scrape_tier_price(page, url: str, expected_pct: float, qty_max: int, debug_m
 
         if not price_sel_appeared:
             log(5, 'Ningún selector de precio apareció — esperando 4 s extra…', ok=False)
-            page.wait_for_timeout(4000)
+            _safe_wait(page, 4000)
 
         snap('05_carrito_cargado')
 
@@ -1100,9 +1197,19 @@ def scrape_obsequios(page, url: str, qty_max: int, debug_mode: bool = False) -> 
         # ── Paso 1: Cargar página ──────────────────────────────────
         log(1, 'Cargando página del producto…')
         page.goto(url, wait_until='domcontentloaded', timeout=30000)
-        page.wait_for_timeout(3000)
-        log(1, f'Cargado: "{page.title()}"')
+        _safe_wait(page, 3000)
+        title_txt = page.title()
+        log(1, f'Cargado: "{title_txt}"')
         snap('01_producto')
+
+        # Detectar 404 antes de continuar
+        err_404 = _check_404(page)
+        if err_404:
+            return {
+                'status':  'error',
+                'message': err_404,
+                'details': {'page_url': page.url, 'page_title': title_txt, 'steps': steps},
+            }
 
         # ── Paso 2: Completar campos de fórmula ───────────────────
         log(2, 'Buscando campos de prescripción…')
@@ -1114,7 +1221,7 @@ def scrape_obsequios(page, url: str, qty_max: int, debug_mode: bool = False) -> 
             else:
                 log(2, f'{field_name}: {r["error"]}', ok=False)
         snap('02_campos')
-        page.wait_for_timeout(500)
+        _safe_wait(page, 500)
 
         # ── Paso 3: Ajustar cantidad ──────────────────────────────
         log(3, f'Ajustando cantidad a {qty_max}…')
@@ -1165,7 +1272,7 @@ def scrape_obsequios(page, url: str, qty_max: int, debug_mode: bool = False) -> 
             except Exception:
                 log(4, 'Sin navegación detectada', ok=False)
 
-        page.wait_for_timeout(2500)
+        _safe_wait(page, 2500)
         snap('04_post_click')
 
         # ── Paso 5: Ir al carrito ──────────────────────────────────
@@ -1187,7 +1294,7 @@ def scrape_obsequios(page, url: str, qty_max: int, debug_mode: bool = False) -> 
             page.wait_for_load_state('networkidle', timeout=10000)
         except Exception:
             pass
-        page.wait_for_timeout(2000)
+        _safe_wait(page, 2000)
         snap('05_carrito')
 
         # Verificar que el carrito no esté vacío
