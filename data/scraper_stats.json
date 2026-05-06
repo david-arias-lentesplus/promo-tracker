@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 67,
-      "units_used": 108,
+      "calls": 68,
+      "units_used": 110,
       "history": [
+        {
+          "id": "scr_20260506202244",
+          "timestamp": "2026-05-06T20:22:44.624109Z",
+          "tipo_promo": "Tier Price",
+          "sku": "51JJAC123",
+          "url": "https://www.lentesplus.com/ar/producto/1-day-acuvue-moist-para-astigmatismo-con-lacreon",
+          "elapsed_ms": 40487,
+          "units": 2,
+          "status": "ok",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506202201",
           "timestamp": "2026-05-06T20:22:01.474794Z",
