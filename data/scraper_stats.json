@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 7,
-      "units_used": 9,
+      "calls": 8,
+      "units_used": 10,
       "history": [
+        {
+          "id": "scr_20260506194910",
+          "timestamp": "2026-05-06T19:49:11.045128Z",
+          "tipo_promo": "Precio tachado",
+          "sku": "31JJAC124",
+          "url": "https://www.lentesplus.com/cl/producto/acuvue-vita",
+          "elapsed_ms": 8457,
+          "units": 1,
+          "status": "ok",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506194900",
           "timestamp": "2026-05-06T19:49:00.228041Z",
