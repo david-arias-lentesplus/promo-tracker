@@ -939,11 +939,32 @@ export default function Analytics() {
 
   const nSelected = selectedKeys.size
 
-  const [activeTab, setActiveTab] = useState('audit')  // 'audit' | 'debug'
+  const [activeTab,   setActiveTab]   = useState('audit')  // 'audit' | 'debug'
+  const [showReport,  setShowReport]  = useState(false)
+
+  // Construir lista de items warning/error para el report (con row original)
+  const reportItems = Object.entries(verifStates)
+    .filter(([k, v]) => currentDataKeys.has(k) && !v.loading &&
+                        (v.status === 'warning' || v.status === 'error'))
+    .map(([k, v]) => ({
+      key:    k,
+      result: v,
+      row:    data.find(r => rowKey(r) === k) || null,
+    }))
 
   return (
     <div>
       <PageLoader show={loading} />
+
+      {/* Report modal */}
+      {showReport && (
+        <ScrapReportModal
+          items={reportItems}
+          data={data}
+          onClose={() => setShowReport(false)}
+        />
+      )}
+
       {/* Header */}
       <div className="flex items-start justify-between mb-4 gap-4">
         <div>
@@ -953,10 +974,31 @@ export default function Analytics() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
           {verifOk   > 0 && <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-700 text-xs font-bold"><IconCheck s={12}/>{verifOk} OK</span>}
-          {verifWarn > 0 && <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-100 text-amber-700 text-xs font-bold"><IconAlert s={12}/>{verifWarn}</span>}
-          {verifErr  > 0 && <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-100 text-red-700 text-xs font-bold"><IconX s={12}/>{verifErr} Error</span>}
+          {verifWarn > 0 && <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-100 text-amber-700 text-xs font-bold"><IconAlert s={12}/>{verifWarn} Advertencia{verifWarn !== 1 ? 's' : ''}</span>}
+          {verifErr  > 0 && <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-100 text-red-700 text-xs font-bold"><IconX s={12}/>{verifErr} Error{verifErr !== 1 ? 'es' : ''}</span>}
+
+          {/* Make Report: visible cuando hay warnings o errores y no está corriendo bulk */}
+          {reportItems.length > 0 && !bulkRunning && (
+            <button
+              onClick={() => setShowReport(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold
+                         bg-gray-900 text-white hover:bg-gray-700 transition-colors shadow-sm">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+                <polyline points="10 9 9 9 8 9"/>
+              </svg>
+              Make Report
+              <span className="ml-0.5 bg-white/20 text-white px-1.5 py-0.5 rounded-md text-[10px] font-bold">
+                {reportItems.length}
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1258,6 +1300,284 @@ export default function Analytics() {
 }
 
 
+
+
+// ─── ScrapReportModal ─────────────────────────────────────────────────────────
+/**
+ * Modal que muestra los productos con warning/error del scraping actual
+ * y permite exportar un PDF completo con screenshots.
+ */
+
+const STATUS_META = {
+  warning: { label: 'Advertencia', color: '#d97706', bg: '#fffbeb', border: '#fde68a', icon: '⚠' },
+  error:   { label: 'Error',       color: '#dc2626', bg: '#fef2f2', border: '#fecaca', icon: '✗' },
+}
+
+function generateReportHTML(items, data) {
+  const now   = new Date().toLocaleString('es-CO', { dateStyle: 'full', timeStyle: 'short' })
+  const total = items.length
+  const warns = items.filter(i => i.status === 'warning').length
+  const errs  = items.filter(i => i.status === 'error').length
+
+  const rowMap = {}
+  data.forEach(r => { rowMap[r.sku] = r })
+
+  const itemsHTML = items.map(({ key, result, row }) => {
+    const meta   = STATUS_META[result.status] || STATUS_META.warning
+    const shots  = result.details?.debug?.screenshots || result.debug?.screenshots || {}
+    const steps  = result.details?.steps || result.steps || []
+    const msg    = result.message || ''
+    const pname  = row?.product_name || key
+    const sku    = row?.sku || ''
+    const pais   = row?.pais || ''
+    const tipo   = row?.tipo_promo || ''
+    const url    = result.url || row?.product_url || ''
+    const disc   = result.details?.discount_real != null ? `${result.details.discount_real}%` : '—'
+    const elapsed= result.elapsed_ms ? `${(result.elapsed_ms/1000).toFixed(1)}s` : ''
+
+    const stepsHTML = steps.length ? `
+      <div style="margin-top:10px">
+        <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Pasos del scraping</div>
+        <ol style="margin:0;padding:0 0 0 18px;font-size:12px;color:#374151">
+          ${steps.map(s => `<li style="margin-bottom:3px;color:${s.ok===false?'#dc2626':'#374151'}">${s.msg||''}</li>`).join('')}
+        </ol>
+      </div>` : ''
+
+    const shotsHTML = Object.keys(shots).length ? `
+      <div style="margin-top:14px">
+        <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Capturas de pantalla</div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          ${Object.entries(shots).map(([label, b64]) => `
+            <div>
+              <div style="font-size:11px;font-weight:600;color:#9ca3af;margin-bottom:4px">${label}</div>
+              <img src="data:image/png;base64,${b64}"
+                   style="width:100%;border:1px solid #e5e7eb;border-radius:6px;display:block" />
+            </div>`).join('')}
+        </div>
+      </div>` : ''
+
+    return `
+    <div style="border:1px solid ${meta.border};border-radius:10px;background:${meta.bg};
+                padding:18px;margin-bottom:20px;page-break-inside:avoid">
+
+      <!-- Header del ítem -->
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="font-size:18px;font-weight:900;color:${meta.color}">${meta.icon}</span>
+            <span style="font-size:14px;font-weight:800;color:#111827">${pname}</span>
+            ${sku ? `<code style="font-size:11px;background:#f3f4f6;padding:2px 7px;border-radius:4px;color:#6b7280">${sku}</code>` : ''}
+            ${pais ? `<code style="font-size:11px;background:#dbeafe;padding:2px 6px;border-radius:4px;color:#1d4ed8">${pais}</code>` : ''}
+          </div>
+          <div style="margin-top:5px;display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:#6b7280">
+            ${tipo ? `<span>Tipo promo: <strong>${tipo}</strong></span>` : ''}
+            ${disc !== '—' ? `<span>Descuento detectado: <strong>${disc}</strong></span>` : ''}
+            ${elapsed ? `<span>Tiempo: <strong>${elapsed}</strong></span>` : ''}
+          </div>
+        </div>
+        <div style="flex-shrink:0">
+          <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;
+                       background:${meta.color};color:#fff">${meta.label.toUpperCase()}</span>
+        </div>
+      </div>
+
+      <!-- Mensaje de error/warning -->
+      <div style="background:#fff;border:1px solid ${meta.border};border-radius:6px;
+                  padding:10px 14px;font-size:13px;color:#1f2937;margin-bottom:8px">
+        ${msg}
+      </div>
+
+      <!-- URL -->
+      ${url ? `<div style="font-size:10px;color:#9ca3af;word-break:break-all;margin-bottom:4px">URL: ${url}</div>` : ''}
+
+      ${stepsHTML}
+      ${shotsHTML}
+    </div>`
+  }).join('')
+
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Scrap Report — ${now}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+           margin: 0; padding: 32px 40px; background: #fff; color: #111827; }
+    @media print {
+      body { padding: 20px 28px; }
+      .no-print { display: none !important; }
+    }
+    h1 { font-size: 22px; font-weight: 900; margin: 0 0 4px; }
+    .subtitle { font-size: 13px; color: #6b7280; margin-bottom: 24px; }
+    .stats { display: flex; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
+    .stat { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 18px; text-align: center; }
+    .stat-n { font-size: 22px; font-weight: 900; }
+    .stat-l { font-size: 11px; color: #6b7280; margin-top: 2px; }
+  </style>
+</head>
+<body>
+  <h1>Scrap Report</h1>
+  <div class="subtitle">Generado el ${now}</div>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-n">${total}</div><div class="stat-l">Productos con alertas</div></div>
+    <div class="stat"><div class="stat-n" style="color:#d97706">${warns}</div><div class="stat-l">Advertencias</div></div>
+    <div class="stat"><div class="stat-n" style="color:#dc2626">${errs}</div><div class="stat-l">Errores</div></div>
+  </div>
+
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin-bottom:24px"/>
+
+  ${itemsHTML}
+</body>
+</html>`
+}
+
+
+function ScrapReportModal({ items, data, onClose }) {
+  const warns = items.filter(i => i.result.status === 'warning').length
+  const errs  = items.filter(i => i.result.status === 'error').length
+
+  function exportPDF() {
+    const html = generateReportHTML(items, data)
+    const win  = window.open('', '_blank', 'width=1000,height=800')
+    if (!win) return
+    win.document.write(html)
+    win.document.close()
+    win.focus()
+    setTimeout(() => { win.print() }, 600)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+         style={{ background: 'rgba(0,0,0,0.55)' }}
+         onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden"
+           onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+          <div>
+            <h2 className="text-base font-black text-gray-900">Scrap Report</h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              {items.length} producto{items.length !== 1 ? 's' : ''} con alertas&nbsp;·&nbsp;
+              {warns > 0 && <span className="text-amber-600 font-bold">{warns} advertencia{warns !== 1 ? 's' : ''}</span>}
+              {warns > 0 && errs > 0 && ' · '}
+              {errs > 0 && <span className="text-red-600 font-bold">{errs} error{errs !== 1 ? 'es' : ''}</span>}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={exportPDF}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#0000E1] text-white
+                         text-xs font-bold hover:bg-blue-700 transition-colors">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Export PDF
+            </button>
+            <button onClick={onClose}
+              className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 transition-colors">
+              <IconX s={15}/>
+            </button>
+          </div>
+        </div>
+
+        {/* Body — scrollable */}
+        <div className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
+          {items.map(({ key, result, row }) => {
+            const meta   = STATUS_META[result.status] || STATUS_META.warning
+            const shots  = result.details?.debug?.screenshots || result.debug?.screenshots || {}
+            const steps  = result.details?.steps || result.steps || []
+            const pname  = row?.product_name || key
+            const sku    = row?.sku || ''
+            const pais   = row?.pais || ''
+            const tipo   = row?.tipo_promo || ''
+            const url    = result.url || row?.product_url || ''
+            const disc   = result.details?.discount_real != null
+                            ? `${result.details.discount_real}%` : null
+
+            return (
+              <div key={key}
+                   style={{ background: meta.bg, borderColor: meta.border }}
+                   className="rounded-xl border p-4">
+
+                {/* Item header */}
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-base">{meta.icon}</span>
+                      <span className="font-bold text-gray-900 text-sm truncate">{pname}</span>
+                      {sku && <code className="text-[11px] bg-white/80 px-1.5 py-0.5 rounded text-gray-500 border border-gray-200">{sku}</code>}
+                      {pais && <code className="text-[11px] bg-blue-50 px-1.5 py-0.5 rounded text-blue-600">{pais}</code>}
+                    </div>
+                    <div className="flex gap-3 flex-wrap mt-1.5">
+                      {tipo && <span className="text-[11px] text-gray-500">Tipo: <strong>{tipo}</strong></span>}
+                      {disc && <span className="text-[11px] text-gray-500">Descuento detectado: <strong>{disc}</strong></span>}
+                      {result.elapsed_ms && <span className="text-[11px] text-gray-400">{(result.elapsed_ms/1000).toFixed(1)}s</span>}
+                    </div>
+                  </div>
+                  <span className="flex-shrink-0 text-[10px] font-bold px-2.5 py-1 rounded-full text-white"
+                        style={{ background: meta.color }}>
+                    {meta.label.toUpperCase()}
+                  </span>
+                </div>
+
+                {/* Mensaje */}
+                <div className="bg-white rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-700 mb-2">
+                  {result.message}
+                </div>
+
+                {/* URL */}
+                {url && (
+                  <p className="text-[10px] text-gray-400 truncate mb-2">
+                    <a href={url} target="_blank" rel="noopener noreferrer"
+                       className="hover:text-[#0000E1] transition-colors">{url}</a>
+                  </p>
+                )}
+
+                {/* Steps */}
+                {steps.length > 0 && (
+                  <details className="mb-3">
+                    <summary className="text-[11px] font-semibold text-gray-500 cursor-pointer select-none hover:text-gray-700">
+                      Pasos ({steps.length})
+                    </summary>
+                    <ol className="mt-2 space-y-0.5 pl-4 list-decimal">
+                      {steps.map((s, i) => (
+                        <li key={i} className={`text-[11px] ${s.ok === false ? 'text-red-500' : 'text-gray-600'}`}>
+                          {s.msg}
+                        </li>
+                      ))}
+                    </ol>
+                  </details>
+                )}
+
+                {/* Screenshots */}
+                {Object.keys(shots).length > 0 && (
+                  <div className="space-y-3">
+                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
+                      Capturas ({Object.keys(shots).length})
+                    </p>
+                    {Object.entries(shots).map(([label, b64]) => (
+                      <div key={label}>
+                        <p className="text-[10px] text-gray-400 mb-1">{label}</p>
+                        <img src={`data:image/png;base64,${b64}`}
+                             alt={label}
+                             className="w-full rounded-lg border border-gray-200 block" />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 
 // ─── ProductDebugTab ──────────────────────────────────────────────────────────
