@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 58,
-      "units_used": 91,
+      "calls": 59,
+      "units_used": 93,
       "history": [
+        {
+          "id": "scr_20260506201700",
+          "timestamp": "2026-05-06T20:17:00.449330Z",
+          "tipo_promo": "Obsequios",
+          "sku": "21BLSL103",
+          "url": "https://www.lentesplus.com/co/producto/soflens-torico",
+          "elapsed_ms": 37554,
+          "units": 2,
+          "status": "warning",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506201619",
           "timestamp": "2026-05-06T20:16:20.009273Z",
