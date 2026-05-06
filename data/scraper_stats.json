@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 66,
-      "units_used": 106,
+      "calls": 67,
+      "units_used": 108,
       "history": [
+        {
+          "id": "scr_20260506202201",
+          "timestamp": "2026-05-06T20:22:01.474794Z",
+          "tipo_promo": "Tier Price",
+          "sku": "51JJAC122",
+          "url": "https://www.lentesplus.com/ar/producto/1-day-acuvue-moist-con-lacreon",
+          "elapsed_ms": 30164,
+          "units": 2,
+          "status": "ok",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506202128",
           "timestamp": "2026-05-06T20:21:28.659529Z",
