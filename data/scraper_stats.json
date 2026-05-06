@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 27,
-      "units_used": 40,
+      "calls": 28,
+      "units_used": 41,
       "history": [
+        {
+          "id": "scr_20260506195835",
+          "timestamp": "2026-05-06T19:58:35.594966Z",
+          "tipo_promo": "Tier Price",
+          "sku": "41JJAC123",
+          "url": "https://www.lentesplus.com/mx/producto/1-day-acuvue-moist-astigmatismo",
+          "elapsed_ms": 9616,
+          "units": 1,
+          "status": "warning",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506195823",
           "timestamp": "2026-05-06T19:58:23.464872Z",
