@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 51,
-      "units_used": 81,
+      "calls": 52,
+      "units_used": 82,
       "history": [
+        {
+          "id": "scr_20260506201300",
+          "timestamp": "2026-05-06T20:13:01.071039Z",
+          "tipo_promo": "Obsequios",
+          "sku": "23BLBT103",
+          "url": "https://www.lentesplus.com/co/producto/biotrue-x-300ml",
+          "elapsed_ms": 24902,
+          "units": 1,
+          "status": "warning",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506201233",
           "timestamp": "2026-05-06T20:12:33.560088Z",
