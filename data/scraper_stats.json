@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 57,
-      "units_used": 89,
+      "calls": 58,
+      "units_used": 91,
       "history": [
+        {
+          "id": "scr_20260506201619",
+          "timestamp": "2026-05-06T20:16:20.009273Z",
+          "tipo_promo": "Obsequios",
+          "sku": "21BLSL104",
+          "url": "https://www.lentesplus.com/co/producto/soflens-59",
+          "elapsed_ms": 30651,
+          "units": 2,
+          "status": "warning",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506201546",
           "timestamp": "2026-05-06T20:15:46.964122Z",
