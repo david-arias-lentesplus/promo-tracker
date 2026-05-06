@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 69,
-      "units_used": 112,
+      "calls": 70,
+      "units_used": 114,
       "history": [
+        {
+          "id": "scr_20260506202402",
+          "timestamp": "2026-05-06T20:24:02.833258Z",
+          "tipo_promo": "Tier Price",
+          "sku": "51JJAC120",
+          "url": "https://www.lentesplus.com/ar/producto/acuvue-oasys-con-hydraclear-plus",
+          "elapsed_ms": 34549,
+          "units": 2,
+          "status": "ok",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506202325",
           "timestamp": "2026-05-06T20:23:25.693825Z",
