@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 49,
-      "units_used": 77,
+      "calls": 50,
+      "units_used": 79,
       "history": [
+        {
+          "id": "scr_20260506201159",
+          "timestamp": "2026-05-06T20:11:59.964082Z",
+          "tipo_promo": "Obsequios",
+          "sku": "23BLRE107",
+          "url": "https://www.lentesplus.com/co/producto/renu-advance-60ml",
+          "elapsed_ms": 43225,
+          "units": 2,
+          "status": "warning",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506201113",
           "timestamp": "2026-05-06T20:11:13.969656Z",
