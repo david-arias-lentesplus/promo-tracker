@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 64,
-      "units_used": 102,
+      "calls": 65,
+      "units_used": 104,
       "history": [
+        {
+          "id": "scr_20260506202049",
+          "timestamp": "2026-05-06T20:20:49.198184Z",
+          "tipo_promo": "Tier Price",
+          "sku": "51JJAC121",
+          "url": "https://www.lentesplus.com/ar/producto/acuvue-2",
+          "elapsed_ms": 33382,
+          "units": 2,
+          "status": "ok",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506202012",
           "timestamp": "2026-05-06T20:20:12.566238Z",
