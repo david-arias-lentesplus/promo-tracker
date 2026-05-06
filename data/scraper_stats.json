@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 47,
-      "units_used": 75,
+      "calls": 48,
+      "units_used": 76,
       "history": [
+        {
+          "id": "scr_20260506201046",
+          "timestamp": "2026-05-06T20:10:46.929543Z",
+          "tipo_promo": "Tier Price",
+          "sku": "51ALAO107",
+          "url": "https://www.lentesplus.com/ar/producto/air-optix-colors-neutros",
+          "elapsed_ms": 11085,
+          "units": 1,
+          "status": "warning",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506201033",
           "timestamp": "2026-05-06T20:10:33.407103Z",
