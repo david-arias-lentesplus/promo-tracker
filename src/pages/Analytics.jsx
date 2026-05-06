@@ -1258,37 +1258,154 @@ export default function Analytics() {
 }
 
 
+
+
 // ─── ProductDebugTab ──────────────────────────────────────────────────────────
 
+function EditModal({ row, overrides, onSave, onClose, saving }) {
+  const current = overrides[row.sku] || row.product_url || ''
+  const [val, setVal] = React.useState(current)
+
+  function handleSave() {
+    const url = val.trim()
+    if (url) onSave(row.sku, url)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+         style={{ background: 'rgba(0,0,0,0.45)' }}
+         onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
+           onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-gray-100 flex items-start justify-between gap-3">
+          <div>
+            <h3 className="font-bold text-gray-900 text-sm">Editar URL del producto</h3>
+            <p className="text-xs text-gray-500 mt-0.5">{row.product_name || 'Sin nombre'}</p>
+          </div>
+          <button onClick={onClose}
+            className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors flex-shrink-0">
+            <IconX s={16}/>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-5 space-y-4">
+          {/* SKU + País */}
+          <div className="flex items-center gap-3">
+            <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded text-gray-600">
+              {row.sku}
+            </span>
+            <span className="text-xs text-gray-500">{row.pais_nombre || row.pais}</span>
+            {overrides[row.sku] && (
+              <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                Override activo
+              </span>
+            )}
+          </div>
+
+          {/* Current URL (read-only) */}
+          {current && (
+            <div>
+              <label className="block text-[11px] font-semibold text-gray-400 mb-1 uppercase tracking-wide">
+                URL actual
+              </label>
+              <p className="text-xs font-mono text-gray-500 bg-gray-50 rounded-lg px-3 py-2 break-all border border-gray-100">
+                {current}
+              </p>
+            </div>
+          )}
+
+          {/* New URL input */}
+          <div>
+            <label className="block text-[11px] font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">
+              {current ? 'Nueva URL' : 'URL del producto'}
+            </label>
+            <input
+              autoFocus
+              type="url"
+              value={val}
+              onChange={e => setVal(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter')  handleSave()
+                if (e.key === 'Escape') onClose()
+              }}
+              placeholder="https://lentesplus.com/co/…"
+              className="w-full text-sm px-3 py-2.5 border border-gray-200 rounded-xl outline-none
+                         font-mono text-gray-700 focus:border-[#0000E1] focus:ring-1 focus:ring-[#0000E1]/20
+                         transition-colors"
+            />
+            <p className="text-[10px] text-gray-400 mt-1.5">
+              Pega la URL del producto desde el sitio de lentesplus. Se aplica al próximo scraping.
+            </p>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-end gap-2 bg-gray-50/50">
+          <button onClick={onClose}
+            className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors">
+            Cancelar
+          </button>
+          <button
+            disabled={saving || !val.trim() || val.trim() === current}
+            onClick={handleSave}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold
+                       bg-[#0000E1] text-white hover:bg-blue-700 disabled:opacity-40 transition-colors">
+            {saving ? <IconLoader s={13}/> : <IconSave s={13}/>}
+            Guardar URL
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
 function ProductDebugTab() {
-  const [rows,     setRows]     = useState([])
-  const [loading,  setLoading]  = useState(true)
-  const [overrides,setOverrides]= useState({})  // {sku: url}
-  const [editSku,  setEditSku]  = useState(null) // sku currently being edited
-  const [editVal,  setEditVal]  = useState('')
-  const [saving,   setSaving]   = useState(false)
-  const [search,   setSearch]   = useState('')
-  const [filter,   setFilter]   = useState('all') // 'all' | 'no_url' | 'overridden'
-  const [toast,    setToast]    = useState(null)
+  const [rows,      setRows]      = useState([])
+  const [loading,   setLoading]   = useState(true)
+  const [overrides, setOverrides] = useState({})   // {sku: url}
+  const [editRow,   setEditRow]   = useState(null)  // row being edited in modal
+  const [saving,    setSaving]    = useState(false)
+  const [search,    setSearch]    = useState('')
+  const [tabFilter, setTabFilter] = useState('all') // 'all' | 'no_url' | 'overridden'
+  const [toast,     setToast]     = useState(null)
 
   function showToast(msg, ok = true) {
     setToast({ msg, ok })
     setTimeout(() => setToast(null), 2800)
   }
 
-  // Load products (limit=500, no filters) + active overrides
+  // Load all products + active overrides
   useEffect(() => {
     let cancelled = false
     async function load() {
       setLoading(true)
       try {
         const [prodRes, ovRes] = await Promise.all([
-          apiRequest('/analytics?limit=500&page=1'),
+          apiRequest('/analytics?limit=200&page=1'),
           apiRequest('/analytics?mode=url_overrides'),
         ])
         if (cancelled) return
-        setRows(prodRes.data || [])
-        setOverrides(ovRes.overrides || {})
+        // Load up to 4 pages to get all products
+        const allData = [...(prodRes.data || [])]
+        const totalPages = prodRes.meta?.total_pages || 1
+        if (totalPages > 1) {
+          const extra = await Promise.all(
+            Array.from({ length: Math.min(totalPages - 1, 4) }, (_, i) =>
+              apiRequest(`/analytics?limit=200&page=${i + 2}`)
+            )
+          )
+          if (!cancelled) {
+            extra.forEach(r => allData.push(...(r.data || [])))
+          }
+        }
+        if (!cancelled) {
+          setRows(allData)
+          setOverrides(ovRes.overrides || {})
+        }
       } catch (e) {
         console.error('[ProductDebug] load error', e)
       } finally {
@@ -1299,19 +1416,7 @@ function ProductDebugTab() {
     return () => { cancelled = true }
   }, [])
 
-  function startEdit(row) {
-    setEditSku(row.sku)
-    setEditVal(overrides[row.sku] || row.product_url || '')
-  }
-
-  function cancelEdit() {
-    setEditSku(null)
-    setEditVal('')
-  }
-
-  async function saveOverride(sku) {
-    const url = editVal.trim()
-    if (!url) return
+  async function handleSave(sku, url) {
     setSaving(true)
     try {
       await apiRequest('/analytics', {
@@ -1319,18 +1424,17 @@ function ProductDebugTab() {
         body: JSON.stringify({ sku, url }),
       })
       setOverrides(prev => ({ ...prev, [sku]: url }))
-      // Also update the row's product_url for visual feedback
       setRows(prev => prev.map(r => r.sku === sku ? { ...r, product_url: url } : r))
-      setEditSku(null)
+      setEditRow(null)
       showToast(`URL actualizada para ${sku}`)
     } catch (e) {
-      showToast('Error al guardar override', false)
+      showToast('Error al guardar', false)
     } finally {
       setSaving(false)
     }
   }
 
-  async function removeOverride(sku) {
+  async function handleRemoveOverride(sku) {
     setSaving(true)
     try {
       await apiRequest(`/analytics?sku=${encodeURIComponent(sku)}`, { method: 'DELETE' })
@@ -1345,27 +1449,35 @@ function ProductDebugTab() {
     }
   }
 
-  // Filter + search
-  const visible = useMemo(() => {
-    let out = rows
-    if (filter === 'no_url')    out = out.filter(r => !r.product_url)
-    if (filter === 'overridden') out = out.filter(r => overrides[r.sku])
-    if (search) {
-      const q = search.toLowerCase()
-      out = out.filter(r =>
-        (r.sku || '').toLowerCase().includes(q) ||
-        (r.product_name || '').toLowerCase().includes(q) ||
-        (r.product_url || '').toLowerCase().includes(q)
-      )
-    }
-    return out
-  }, [rows, filter, search, overrides])
+  // Compute filtered rows synchronously (no useMemo — avoids stale closure issues)
+  const q = search.trim().toLowerCase()
+  const visible = rows.filter(r => {
+    if (tabFilter === 'no_url'    && r.product_url)     return false
+    if (tabFilter === 'overridden' && !overrides[r.sku]) return false
+    if (q && !(
+      (r.sku          || '').toLowerCase().includes(q) ||
+      (r.product_name || '').toLowerCase().includes(q) ||
+      (r.product_url  || '').toLowerCase().includes(q)
+    )) return false
+    return true
+  })
 
   const noUrlCount      = rows.filter(r => !r.product_url).length
   const overriddenCount = Object.keys(overrides).length
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+    <>
+      {/* Edit modal */}
+      {editRow && (
+        <EditModal
+          row={editRow}
+          overrides={overrides}
+          onSave={handleSave}
+          onClose={() => setEditRow(null)}
+          saving={saving}
+        />
+      )}
+
       {/* Toast */}
       {toast && (
         <div className={`fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-xl shadow-lg text-sm font-semibold
@@ -1374,188 +1486,171 @@ function ProductDebugTab() {
         </div>
       )}
 
-      {/* Toolbar */}
-      <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-1.5 flex-1 min-w-[200px]">
-          <IconSearch s={14} />
-          <input
-            type="text"
-            placeholder="Buscar SKU, nombre o URL…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="flex-1 text-sm outline-none placeholder-gray-400 text-gray-700"
-          />
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        {/* Toolbar */}
+        <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-3 flex-wrap">
+          {/* Search */}
+          <div className="flex items-center gap-2 flex-1 min-w-[200px] h-8 px-3
+                          border border-gray-200 rounded-xl bg-gray-50 focus-within:border-[#0000E1]
+                          focus-within:bg-white transition-colors">
+            <IconSearch s={13} />
+            <input
+              type="text"
+              placeholder="Buscar por SKU, nombre o URL…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="flex-1 text-sm outline-none bg-transparent placeholder-gray-400 text-gray-700"
+            />
+            {search && (
+              <button onClick={() => setSearch('')}
+                className="text-gray-300 hover:text-gray-500 transition-colors">
+                <IconX s={12}/>
+              </button>
+            )}
+          </div>
+          {/* Filter pills */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {[
+              { id: 'all',        label: `Todos (${rows.length})` },
+              { id: 'no_url',     label: `Sin URL (${noUrlCount})` },
+              { id: 'overridden', label: `Con override (${overriddenCount})` },
+            ].map(f => (
+              <button key={f.id} onClick={() => setTabFilter(f.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors
+                  ${tabFilter === f.id
+                    ? 'bg-[#0000E1] text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                {f.label}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="flex items-center gap-1">
-          {[
-            { id: 'all',       label: `Todos (${rows.length})` },
-            { id: 'no_url',    label: `Sin URL (${noUrlCount})` },
-            { id: 'overridden',label: `Con override (${overriddenCount})` },
-          ].map(f => (
-            <button key={f.id} onClick={() => setFilter(f.id)}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors
-                ${filter === f.id ? 'bg-[#0000E1] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-              {f.label}
-            </button>
-          ))}
-        </div>
-      </div>
 
-      {/* Table */}
-      {loading ? (
-        <div className="flex items-center justify-center py-16 text-gray-400 text-sm gap-2">
-          <IconLoader s={16} /> Cargando productos…
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide w-[100px]">SKU</th>
-                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Producto</th>
-                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide w-[60px]">País</th>
-                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">URL actual</th>
-                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide w-[120px]">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {visible.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-400">
-                    No hay productos que coincidan con el filtro
-                  </td>
+        {/* Table */}
+        {loading ? (
+          <div className="flex items-center justify-center py-16 text-gray-400 text-sm gap-2">
+            <IconLoader s={16}/> Cargando productos…
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-100">
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide w-28">SKU</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Producto</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide w-14">País</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">URL</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide w-28">Acción</th>
                 </tr>
-              )}
-              {visible.map(row => {
-                const isEditing  = editSku === row.sku
-                const hasOverride = !!overrides[row.sku]
-                const hasUrl     = !!row.product_url
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {visible.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-400">
+                      {loading ? 'Cargando…' : 'No hay productos que coincidan'}
+                    </td>
+                  </tr>
+                ) : visible.map(row => {
+                  const hasOverride = !!overrides[row.sku]
+                  const hasUrl      = !!row.product_url
 
-                return (
-                  <tr key={`${row.sku}-${row.pais}`}
-                    className="hover:bg-gray-50/60 transition-colors">
+                  return (
+                    <tr key={`${row.sku}-${row.pais}`}
+                      className="hover:bg-gray-50/70 transition-colors">
 
-                    {/* SKU */}
-                    <td className="px-4 py-2.5">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="font-mono text-[11px] text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">
-                          {row.sku}
-                        </span>
-                        {hasOverride && (
-                          <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                            Override
+                      {/* SKU */}
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col gap-1">
+                          <span className="font-mono text-[11px] text-gray-600 bg-gray-100
+                                           px-1.5 py-0.5 rounded w-fit">
+                            {row.sku}
                           </span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Nombre */}
-                    <td className="px-4 py-2.5 max-w-[220px]">
-                      <p className="text-xs text-gray-800 line-clamp-2">{row.product_name || '—'}</p>
-                      <p className="text-[10px] text-gray-400 mt-0.5">{row.fabricante || ''}</p>
-                    </td>
-
-                    {/* País */}
-                    <td className="px-4 py-2.5">
-                      <span className="text-[11px] font-semibold text-gray-500">{row.pais || '—'}</span>
-                    </td>
-
-                    {/* URL */}
-                    <td className="px-4 py-2.5 max-w-[340px]">
-                      {isEditing ? (
-                        <input
-                          autoFocus
-                          type="url"
-                          value={editVal}
-                          onChange={e => setEditVal(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter')  saveOverride(row.sku)
-                            if (e.key === 'Escape') cancelEdit()
-                          }}
-                          className="w-full text-xs px-2 py-1.5 border border-[#0000E1] rounded-lg outline-none
-                                     font-mono text-gray-700 bg-blue-50"
-                          placeholder="https://…"
-                        />
-                      ) : (
-                        <div className="flex items-center gap-1.5">
-                          {hasUrl ? (
-                            <a href={row.product_url} target="_blank" rel="noopener noreferrer"
-                               className="text-[11px] text-[#0000E1] hover:underline font-mono truncate block max-w-[300px]"
-                               title={row.product_url}>
-                              {row.product_url}
-                            </a>
-                          ) : (
-                            <span className="text-[11px] text-red-500 font-semibold flex items-center gap-1">
-                              <IconAlert s={11}/> Sin URL
+                          {hasOverride && (
+                            <span className="text-[10px] font-bold text-amber-600 bg-amber-50
+                                             px-1.5 py-0.5 rounded border border-amber-200 w-fit">
+                              Override
                             </span>
                           )}
-                          {hasUrl && (
+                        </div>
+                      </td>
+
+                      {/* Nombre */}
+                      <td className="px-4 py-3 max-w-[200px]">
+                        <p className="text-xs text-gray-800 line-clamp-2">{row.product_name || '—'}</p>
+                        {row.fabricante && (
+                          <p className="text-[10px] text-gray-400 mt-0.5">{row.fabricante}</p>
+                        )}
+                      </td>
+
+                      {/* País */}
+                      <td className="px-4 py-3">
+                        <span className="text-[11px] font-semibold text-gray-500">{row.pais || '—'}</span>
+                      </td>
+
+                      {/* URL */}
+                      <td className="px-4 py-3 max-w-[300px]">
+                        {hasUrl ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] font-mono text-gray-500 truncate block max-w-[260px]"
+                                  title={row.product_url}>
+                              {row.product_url}
+                            </span>
                             <a href={row.product_url} target="_blank" rel="noopener noreferrer"
-                               className="text-gray-300 hover:text-[#0000E1] flex-shrink-0">
+                               className="text-gray-300 hover:text-[#0000E1] flex-shrink-0 transition-colors">
                               <IconExternal s={10}/>
                             </a>
-                          )}
-                        </div>
-                      )}
-                    </td>
+                          </div>
+                        ) : (
+                          <span className="flex items-center gap-1 text-[11px] text-red-500 font-semibold">
+                            <IconAlert s={11}/> Sin URL
+                          </span>
+                        )}
+                      </td>
 
-                    {/* Acciones */}
-                    <td className="px-4 py-2.5">
-                      {isEditing ? (
+                      {/* Acciones */}
+                      <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
                           <button
-                            disabled={saving}
-                            onClick={() => saveOverride(row.sku)}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#0000E1] text-white
-                                       text-[11px] font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
-                            <IconSave s={11}/> Guardar
-                          </button>
-                          <button onClick={cancelEdit}
-                            className="px-2 py-1 rounded-lg bg-gray-100 text-gray-600
-                                       text-[11px] font-semibold hover:bg-gray-200 transition-colors">
-                            <IconX s={11}/>
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1.5">
-                          <button onClick={() => startEdit(row)}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-100 text-gray-600
-                                       text-[11px] font-semibold hover:bg-gray-200 transition-colors">
+                            onClick={() => setEditRow(row)}
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-gray-100
+                                       text-gray-600 text-[11px] font-semibold hover:bg-gray-200 transition-colors">
                             <IconEdit s={11}/> Editar
                           </button>
                           {hasOverride && (
                             <button
                               disabled={saving}
-                              onClick={() => removeOverride(row.sku)}
-                              title="Eliminar override — volver al CSV original"
-                              className="p-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100
-                                         transition-colors disabled:opacity-50">
+                              onClick={() => handleRemoveOverride(row.sku)}
+                              title="Eliminar override — volver a URL original del CSV"
+                              className="p-1.5 rounded-lg bg-red-50 text-red-400 hover:bg-red-100
+                                         transition-colors disabled:opacity-40">
                               <IconTrash s={11}/>
                             </button>
                           )}
                         </div>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-      {/* Footer */}
-      {!loading && (
-        <div className="px-5 py-2.5 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
-          <p className="text-xs text-gray-500">
-            {visible.length} producto{visible.length !== 1 ? 's' : ''} mostrados
-            {overriddenCount > 0 && <> · <span className="text-amber-600 font-semibold">{overriddenCount} con override</span></>}
-          </p>
-          <p className="text-[10px] text-gray-400">
-            Los cambios aplican al siguiente scraping de cada producto
-          </p>
-        </div>
-      )}
-    </div>
+        {/* Footer */}
+        {!loading && (
+          <div className="px-5 py-2.5 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
+            <p className="text-xs text-gray-500">
+              {visible.length} de {rows.length} producto{rows.length !== 1 ? 's' : ''}
+              {overriddenCount > 0 && (
+                <> · <span className="text-amber-600 font-semibold">{overriddenCount} con override</span></>
+              )}
+            </p>
+            <p className="text-[10px] text-gray-400">
+              Los cambios se aplican al próximo scraping del producto
+            </p>
+          </div>
+        )}
+      </div>
+    </>
   )
 }
