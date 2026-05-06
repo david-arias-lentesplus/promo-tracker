@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 45,
-      "units_used": 70,
+      "calls": 46,
+      "units_used": 72,
       "history": [
+        {
+          "id": "scr_20260506200929",
+          "timestamp": "2026-05-06T20:09:29.089158Z",
+          "tipo_promo": "Tier Price",
+          "sku": "51ALPN101",
+          "url": "https://www.lentesplus.com/ar/producto/lentes-precision1-diarios",
+          "elapsed_ms": 38612,
+          "units": 2,
+          "status": "warning",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506200847",
           "timestamp": "2026-05-06T20:08:48.040664Z",
