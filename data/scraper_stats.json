@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 48,
-      "units_used": 76,
+      "calls": 49,
+      "units_used": 77,
       "history": [
+        {
+          "id": "scr_20260506201113",
+          "timestamp": "2026-05-06T20:11:13.969656Z",
+          "tipo_promo": "Obsequios",
+          "sku": "23BLRE104",
+          "url": "https://www.lentesplus.com/co/producto/renu-fresh-500ml",
+          "elapsed_ms": 24520,
+          "units": 1,
+          "status": "warning",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506201046",
           "timestamp": "2026-05-06T20:10:46.929543Z",
