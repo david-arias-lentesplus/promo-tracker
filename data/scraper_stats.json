@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 78,
-      "units_used": 130,
+      "calls": 79,
+      "units_used": 132,
       "history": [
+        {
+          "id": "scr_20260506203053",
+          "timestamp": "2026-05-06T20:30:53.759816Z",
+          "tipo_promo": "Tier Price",
+          "sku": "51JJAC133",
+          "url": "https://www.lentesplus.com/ar/producto/acuvue-oasys-1day-astigmatismo",
+          "elapsed_ms": 49534,
+          "units": 2,
+          "status": "ok",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506202958",
           "timestamp": "2026-05-06T20:29:58.220481Z",
