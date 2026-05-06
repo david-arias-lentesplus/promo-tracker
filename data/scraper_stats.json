@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 62,
-      "units_used": 98,
+      "calls": 63,
+      "units_used": 100,
       "history": [
+        {
+          "id": "scr_20260506201926",
+          "timestamp": "2026-05-06T20:19:26.637116Z",
+          "tipo_promo": "Tier Price",
+          "sku": "51JJAC124",
+          "url": "https://www.lentesplus.com/ar/producto/acuvue-vita",
+          "elapsed_ms": 31408,
+          "units": 2,
+          "status": "ok",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506201852",
           "timestamp": "2026-05-06T20:18:52.755917Z",
