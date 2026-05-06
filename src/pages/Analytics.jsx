@@ -1262,6 +1262,27 @@ export default function Analytics() {
 
 // ─── ProductDebugTab ──────────────────────────────────────────────────────────
 
+/** Colapsa filas con el mismo SKU en una sola, acumulando los países en `paises[]` */
+function deduplicateBySkU(rawRows) {
+  const map = new Map()
+  for (const r of rawRows) {
+    const key = r.sku ? r.sku.toUpperCase() : `__nosku_${r.product_name}`
+    if (!map.has(key)) {
+      map.set(key, { ...r, paises: r.pais ? [r.pais] : [] })
+    } else {
+      const existing = map.get(key)
+      if (r.pais && !existing.paises.includes(r.pais)) {
+        existing.paises.push(r.pais)
+      }
+      // Mantener la primera URL no vacía
+      if (!existing.product_url && r.product_url) {
+        existing.product_url = r.product_url
+      }
+    }
+  }
+  return Array.from(map.values())
+}
+
 function EditModal({ row, overrides, onSave, onClose, saving }) {
   const current = overrides[row.sku] || row.product_url || ''
   const [val, setVal] = React.useState(current)
@@ -1403,7 +1424,7 @@ function ProductDebugTab() {
           }
         }
         if (!cancelled) {
-          setRows(allData)
+          setRows(deduplicateBySkU(allData))
           setOverrides(ovRes.overrides || {})
         }
       } catch (e) {
@@ -1584,7 +1605,18 @@ function ProductDebugTab() {
 
                       {/* País */}
                       <td className="px-4 py-3">
-                        <span className="text-[11px] font-semibold text-gray-500">{row.pais || '—'}</span>
+                        <div className="flex flex-wrap gap-1">
+                          {(row.paises && row.paises.length > 0
+                            ? row.paises
+                            : row.pais ? [row.pais] : ['—']
+                          ).map(p => (
+                            <span key={p}
+                              className="text-[10px] font-semibold text-gray-500 bg-gray-100
+                                         px-1.5 py-0.5 rounded leading-tight">
+                              {p}
+                            </span>
+                          ))}
+                        </div>
                       </td>
 
                       {/* URL */}
