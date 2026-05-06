@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 41,
-      "units_used": 63,
+      "calls": 42,
+      "units_used": 65,
       "history": [
+        {
+          "id": "scr_20260506200639",
+          "timestamp": "2026-05-06T20:06:40.044963Z",
+          "tipo_promo": "Tier Price",
+          "sku": "51ALAO119",
+          "url": "https://www.lentesplus.com/ar/producto/air-optix-plus-hydraglyde",
+          "elapsed_ms": 34063,
+          "units": 2,
+          "status": "ok",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506200600",
           "timestamp": "2026-05-06T20:06:00.217133Z",
