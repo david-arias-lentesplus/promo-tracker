@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 71,
-      "units_used": 116,
+      "calls": 72,
+      "units_used": 118,
       "history": [
+        {
+          "id": "scr_20260506202533",
+          "timestamp": "2026-05-06T20:25:33.974930Z",
+          "tipo_promo": "Tier Price",
+          "sku": "51JJAC127",
+          "url": "https://www.lentesplus.com/ar/producto/acuvue-oasys-multifocal",
+          "elapsed_ms": 39487,
+          "units": 2,
+          "status": "ok",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506202451",
           "timestamp": "2026-05-06T20:24:51.728629Z",
