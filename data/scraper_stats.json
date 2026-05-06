@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 14,
-      "units_used": 16,
+      "calls": 15,
+      "units_used": 17,
       "history": [
+        {
+          "id": "scr_20260506195035",
+          "timestamp": "2026-05-06T19:50:35.763610Z",
+          "tipo_promo": "Precio tachado",
+          "sku": "31JJAC136",
+          "url": "https://www.lentesplus.com/cl/producto/acuvue-oasys-bandage",
+          "elapsed_ms": 7667,
+          "units": 1,
+          "status": "ok",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506195025",
           "timestamp": "2026-05-06T19:50:25.320377Z",
