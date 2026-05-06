@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 36,
-      "units_used": 53,
+      "calls": 37,
+      "units_used": 55,
       "history": [
+        {
+          "id": "scr_20260506200311",
+          "timestamp": "2026-05-06T20:03:11.594681Z",
+          "tipo_promo": "Tier Price",
+          "sku": "21JJAC122",
+          "url": "https://www.lentesplus.com/co/producto/1-day-acuvue-moist",
+          "elapsed_ms": 41355,
+          "units": 2,
+          "status": "warning",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506200227",
           "timestamp": "2026-05-06T20:02:27.791005Z",
