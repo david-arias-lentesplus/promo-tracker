@@ -1730,12 +1730,12 @@ function ProductDebugTab() {
           apiRequest('/analytics?mode=url_overrides'),
         ])
         if (cancelled) return
-        // Load up to 4 pages to get all products
+        // Load up to 20 pages (4000 products) to avoid missing SKUs
         const allData = [...(prodRes.data || [])]
         const totalPages = prodRes.meta?.total_pages || 1
         if (totalPages > 1) {
           const extra = await Promise.all(
-            Array.from({ length: Math.min(totalPages - 1, 4) }, (_, i) =>
+            Array.from({ length: Math.min(totalPages - 1, 19) }, (_, i) =>
               apiRequest(`/analytics?limit=200&page=${i + 2}`)
             )
           )

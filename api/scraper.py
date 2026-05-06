@@ -77,7 +77,11 @@ PRECIO_FINAL_SEL = (
 def scrape_precio_tachado(page, url: str, expected_pct: float) -> dict:
     try:
         page.goto(url, wait_until='domcontentloaded', timeout=30000)
-        page.wait_for_selector(PRECIO_FINAL_SEL, timeout=15000)
+        try:
+            page.wait_for_selector(PRECIO_FINAL_SEL, timeout=10000)
+        except Exception:
+            # Selector may not appear if price structure differs; continue anyway
+            pass
 
         raw_full, raw_final = '', ''
         try:
@@ -133,6 +137,12 @@ def scrape_precio_tachado(page, url: str, expected_pct: float) -> dict:
         return {'status': status, 'message': msg, 'details': details}
 
     except Exception as e:
+        if _is_closed_err(e):
+            return {
+                'status':  'warning',
+                'message': 'Browserless cerró el contexto antes de completar la verificación de precio tachado.',
+                'details': {},
+            }
         return {'status': 'error', 'message': f'Error precio tachado: {str(e)}', 'details': {}}
 
 
@@ -226,14 +236,37 @@ def _page_alive(page) -> bool:
         return False
 
 
+def _is_closed_err(e) -> bool:
+    """True si la excepción indica que el browser/page fue cerrado prematuramente."""
+    msg = str(e).lower()
+    return any(kw in msg for kw in [
+        'target page, context or browser has been closed',
+        'target closed',
+        'context or browser has been closed',
+        'browser has been closed',
+        'page has been closed',
+        'connection closed',
+        'websocket',
+    ])
+
+
 def _check_404(page) -> str | None:
     """
     Retorna mensaje de error si la página es 404, None si todo está bien.
     Detecta: título con '404', URL con '/404', o texto de cuerpo típico.
+    Retorna None silenciosamente si el browser fue cerrado.
     """
     try:
-        title = page.title().lower()
-        url   = page.url
+        try:
+            title = page.title().lower()
+        except Exception as _te:
+            if _is_closed_err(_te):
+                return None
+            title = ''
+        try:
+            url = page.url
+        except Exception:
+            url = ''
         body  = ''
         try:
             body = page.inner_text('body')[:600].lower()
@@ -701,6 +734,35 @@ def _extract_cart_discount_v2(page) -> dict:
         try:
             summary_raw = page.inner_text('body')[:5000]
         except Exception:
+            summary_raw = ''
+
+    # ── 1b. Fallback subtotal: scan all price-like spans in cart area ────
+    if not subtotal:
+        try:
+            span_sels = [
+                '[class*="cartPage-items"] span',
+                '[class*="cart-items"] span',
+                '[class*="cartItems"] span',
+                '[class*="items_container"] span',
+            ]
+            for _sel in span_sels:
+                _els = page.query_selector_all(_sel)
+                if not _els:
+                    continue
+                for _el in _els:
+                    try:
+                        _txt = _el.inner_text().strip()
+                        _p = _clean_price(_txt)
+                        if _p and _p > 100:
+                            subtotal = _p
+                            result['item_price_hit'] = f'span_scan:{_sel}'
+                            result['raw'] = f'Span scan ({_sel}): {_txt}'
+                            break
+                    except Exception:
+                        continue
+                if subtotal:
+                    break
+        except Exception:
             pass
 
     result['raw_summary'] = summary_raw
@@ -793,7 +855,16 @@ def scrape_tier_price(page, url: str, expected_pct: float, qty_max: int, debug_m
         log(1, f'Cargando página del producto…')
         page.goto(url, wait_until='domcontentloaded', timeout=30000)
         _safe_wait(page, 3000)  # React hydration
-        title = page.title()
+        try:
+            title = page.title()
+        except Exception as _te:
+            if _is_closed_err(_te):
+                return {
+                    'status':  'warning',
+                    'message': 'Browserless cerró el contexto antes de completar la verificación.',
+                    'details': {'steps': steps},
+                }
+            title = ''
         log(1, f'Cargado: "{title}" | URL: {page.url}')
         snap('01_producto')
 
@@ -817,19 +888,12 @@ def scrape_tier_price(page, url: str, expected_pct: float, qty_max: int, debug_m
                 log(2, f'{field_name}: {r["error"]}', ok=False)
 
         if not fields_filled:
+            # No prescription fields found — could be a Color-only or simple product.
+            # Log a warning but continue; the cart check will tell us if the product was added.
+            log(2, 'Sin campos de fórmula completados — continuando (puede ser producto sin fórmula)', ok=False)
             snap('02_no_fields')
-            return {
-                'status':  'warning',
-                'message': 'No se encontraron campos de fórmula en este producto. '
-                           'Puede que no sea un lente de contacto formulado, o la página cambió su estructura.',
-                'details': {
-                    'fields_filled': {},
-                    'steps': steps,
-                    'debug': {'screenshots': screenshots, 'page_url': page.url},
-                },
-            }
-
-        snap('02_campos_llenos')
+        else:
+            snap('02_campos_llenos')
         log(2, f'{len(fields_filled)} de {len(FORMULA_FIELDS)} campos completados')
         _safe_wait(page, 500)
 
@@ -844,6 +908,35 @@ def scrape_tier_price(page, url: str, expected_pct: float, qty_max: int, debug_m
             final_qty = _click_plus_until_qty(page, qty_max, log_fn=log)
 
         snap('03_cantidad')
+
+        # ── Paso 3b: Detectar producto sin stock ─────────────────
+        OOS_PHRASES = [
+            'producto no disponible', 'agotado', 'sin stock',
+            'out of stock', 'no disponible', 'unavailable',
+        ]
+        try:
+            _oos_body = page.inner_text('body').lower()
+            for _phrase in OOS_PHRASES:
+                if _phrase in _oos_body:
+                    snap('03b_sin_stock')
+                    log(4, f'Producto sin stock detectado: "{_phrase}"', ok=False)
+                    return {
+                        'status':  'warning',
+                        'message': f'Producto no disponible (sin stock). Frase detectada: "{_phrase}".',
+                        'details': {
+                            'fields_filled': fields_filled,
+                            'qty':   final_qty,
+                            'steps': steps,
+                            'debug': {'screenshots': screenshots, 'page_url': page.url},
+                        },
+                    }
+        except Exception as _oos_e:
+            if _is_closed_err(_oos_e):
+                return {
+                    'status':  'warning',
+                    'message': 'Browserless cerró el contexto antes de completar la verificación.',
+                    'details': {'fields_filled': fields_filled, 'steps': steps},
+                }
 
         # ── Paso 4: Click "Agregar a la bolsa" ───────────────────
         log(4, 'Buscando botón de agregar al carrito…')
@@ -975,7 +1068,16 @@ def scrape_tier_price(page, url: str, expected_pct: float, qty_max: int, debug_m
         snap('05_carrito_cargado')
 
         # ── Paso 6: Verificar que el carrito no está vacío ────────
-        page_text = page.inner_text('body')
+        try:
+            page_text = page.inner_text('body')
+        except Exception as _pte:
+            if _is_closed_err(_pte):
+                return {
+                    'status':  'warning',
+                    'message': 'Browserless cerró el contexto antes de leer el carrito.',
+                    'details': {'fields_filled': fields_filled, 'steps': steps},
+                }
+            page_text = ''
         if any(ph in page_text.lower() for ph in CART_EMPTY_PHRASES):
             log(6, 'Carrito vacío detectado', ok=False)
             return {
@@ -1090,6 +1192,17 @@ def scrape_tier_price(page, url: str, expected_pct: float, qty_max: int, debug_m
         return {'status': status, 'message': msg, 'details': details}
 
     except Exception as e:
+        if _is_closed_err(e):
+            snap('exception')
+            return {
+                'status':  'warning',
+                'message': 'Browserless cerró el contexto antes de completar la verificación (Tier Price).',
+                'details': {
+                    'fields_filled': fields_filled,
+                    'steps':         steps,
+                    'debug': {'screenshots': screenshots},
+                },
+            }
         import traceback
         tb = traceback.format_exc()
         snap('exception')
@@ -1216,7 +1329,16 @@ def scrape_obsequios(page, url: str, qty_max: int, debug_mode: bool = False) -> 
         log(1, 'Cargando página del producto…')
         page.goto(url, wait_until='domcontentloaded', timeout=30000)
         _safe_wait(page, 3000)
-        title_txt = page.title()
+        try:
+            title_txt = page.title()
+        except Exception as _te:
+            if _is_closed_err(_te):
+                return {
+                    'status':  'warning',
+                    'message': 'Browserless cerró el contexto antes de completar la verificación.',
+                    'details': {'steps': steps},
+                }
+            title_txt = ''
         log(1, f'Cargado: "{title_txt}"')
         snap('01_producto')
 
@@ -1250,6 +1372,35 @@ def scrape_obsequios(page, url: str, qty_max: int, debug_mode: bool = False) -> 
         else:
             final_qty = _click_plus_until_qty(page, qty_max, log_fn=log)
         snap('03_cantidad')
+
+        # ── Paso 3b: Detectar producto sin stock ─────────────────
+        _OOS_PHRASES = [
+            'producto no disponible', 'agotado', 'sin stock',
+            'out of stock', 'no disponible', 'unavailable',
+        ]
+        try:
+            _oos_body = page.inner_text('body').lower()
+            for _phrase in _OOS_PHRASES:
+                if _phrase in _oos_body:
+                    snap('03b_sin_stock')
+                    log(4, f'Producto sin stock: "{_phrase}"', ok=False)
+                    return {
+                        'status':  'warning',
+                        'message': f'Producto no disponible (sin stock). Frase detectada: "{_phrase}".',
+                        'details': {
+                            'fields_filled': fields_filled,
+                            'qty':   final_qty,
+                            'steps': steps,
+                            'debug': {'screenshots': screenshots, 'page_url': page.url},
+                        },
+                    }
+        except Exception as _oos_e:
+            if _is_closed_err(_oos_e):
+                return {
+                    'status':  'warning',
+                    'message': 'Browserless cerró el contexto antes de completar la verificación.',
+                    'details': {'fields_filled': fields_filled, 'steps': steps},
+                }
 
         # ── Paso 4: Agregar al carrito ────────────────────────────
         log(4, 'Buscando botón agregar al carrito…')
@@ -1316,7 +1467,16 @@ def scrape_obsequios(page, url: str, qty_max: int, debug_mode: bool = False) -> 
         snap('05_carrito')
 
         # Verificar que el carrito no esté vacío
-        page_text = page.inner_text('body')
+        try:
+            page_text = page.inner_text('body')
+        except Exception as _pte:
+            if _is_closed_err(_pte):
+                return {
+                    'status':  'warning',
+                    'message': 'Browserless cerró el contexto antes de leer el carrito.',
+                    'details': {'fields_filled': fields_filled, 'steps': steps},
+                }
+            page_text = ''
         if any(ph in page_text.lower() for ph in CART_EMPTY_PHRASES):
             log(5, 'Carrito vacío — el producto no pudo agregarse', ok=False)
             return {
@@ -1382,6 +1542,17 @@ def scrape_obsequios(page, url: str, qty_max: int, debug_mode: bool = False) -> 
         }
 
     except Exception as e:
+        if _is_closed_err(e):
+            snap('exception')
+            return {
+                'status':  'warning',
+                'message': 'Browserless cerró el contexto antes de completar la verificación (Obsequios).',
+                'details': {
+                    'fields_filled': fields_filled,
+                    'steps':         steps,
+                    'debug':         {'screenshots': screenshots},
+                },
+            }
         import traceback
         snap('exception')
         return {
