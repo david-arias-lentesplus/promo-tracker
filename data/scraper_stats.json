@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 53,
-      "units_used": 83,
+      "calls": 54,
+      "units_used": 84,
       "history": [
+        {
+          "id": "scr_20260506201353",
+          "timestamp": "2026-05-06T20:13:54.100266Z",
+          "tipo_promo": "Obsequios",
+          "sku": "23BLBT101",
+          "url": "https://www.lentesplus.com/co/producto/biotrue-x-120ml",
+          "elapsed_ms": 24071,
+          "units": 1,
+          "status": "warning",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506201327",
           "timestamp": "2026-05-06T20:13:27.219460Z",
