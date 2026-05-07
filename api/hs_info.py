@@ -11,7 +11,7 @@ _API_DIR = os.path.dirname(os.path.abspath(__file__))
 if _API_DIR not in sys.path:
     sys.path.insert(0, _API_DIR)
 
-import json, time, urllib.request, urllib.error
+import json, time, ssl, urllib.request, urllib.error
 from datetime import date as _date, datetime, timezone
 from collections import defaultdict
 from http.server import BaseHTTPRequestHandler
@@ -146,7 +146,10 @@ class handler(BaseHTTPRequestHandler):
                         'Content-Type':   'application/json',
                     },
                 )
-                with urllib.request.urlopen(req, timeout=15) as r:
+                ssl_ctx = ssl.create_default_context()
+                ssl_ctx.check_hostname = False
+                ssl_ctx.verify_mode = ssl.CERT_NONE
+                with urllib.request.urlopen(req, timeout=15, context=ssl_ctx) as r:
                     result = json.loads(r.read())
             except urllib.error.HTTPError as e:
                 body_err = ''
