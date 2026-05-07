@@ -261,6 +261,32 @@ export default function HSInfo() {
   const [error,   setError]   = useState('')
   const [search,  setSearch]  = useState('')
 
+  // ── ClickUp task creation ─────────────────────────────────
+  const [cuLoading, setCuLoading] = useState(false)
+  const [cuResult,  setCuResult]  = useState(null)  // {ok, url, name} | {error}
+
+  const createClickupTask = useCallback(async () => {
+    setCuLoading(true); setCuResult(null)
+    try {
+      const res = await apiRequest('/hs_info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create_clickup_task', date_from: dateFrom }),
+      })
+      if (res.status === 'ok') {
+        setCuResult({ ok: true, url: res.task_url, name: res.task_name })
+      } else {
+        setCuResult({ ok: false, error: res.message || 'Error desconocido' })
+      }
+    } catch (e) {
+      setCuResult({ ok: false, error: e.message || 'Error al conectar con el servidor' })
+    } finally {
+      setCuLoading(false)
+      // Limpiar el resultado después de 8 segundos
+      setTimeout(() => setCuResult(null), 8000)
+    }
+  }, [dateFrom])
+
   const fetchData = useCallback(async () => {
     setLoading(true); setError('')
     try {
@@ -319,17 +345,66 @@ export default function HSInfo() {
             )}
           </p>
         </div>
-        <button
-          onClick={fetchData}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold
-                     border-[1.5px] border-blue-600 text-blue-600
-                     hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed
-                     transition-all duration-150"
-        >
-          <IconRefresh spin={loading} />
-          Actualizar
-        </button>
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex items-center gap-2">
+            {/* Botón ClickUp */}
+            <button
+              onClick={createClickupTask}
+              disabled={cuLoading || loading}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold
+                         border-[1.5px] border-violet-600 text-violet-600
+                         hover:bg-violet-50 disabled:opacity-50 disabled:cursor-not-allowed
+                         transition-all duration-150"
+            >
+              {cuLoading ? (
+                <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                </svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 32 32" fill="none">
+                  <circle cx="16" cy="16" r="14" stroke="currentColor" strokeWidth="2.5"/>
+                  <path d="M8 16l5 5 11-10" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
+              {cuLoading ? 'Creando…' : 'Create ClickUp Task'}
+            </button>
+
+            {/* Botón Actualizar */}
+            <button
+              onClick={fetchData}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold
+                         border-[1.5px] border-blue-600 text-blue-600
+                         hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed
+                         transition-all duration-150"
+            >
+              <IconRefresh spin={loading} />
+              Actualizar
+            </button>
+          </div>
+
+          {/* Feedback inline */}
+          {cuResult && (
+            <div className={`text-xs font-medium px-3 py-1.5 rounded-lg flex items-center gap-2 ${
+              cuResult.ok
+                ? 'bg-green-50 text-green-700 border border-green-200'
+                : 'bg-red-50 text-red-700 border border-red-200'
+            }`}>
+              {cuResult.ok ? (
+                <>
+                  <span>✓ Tarea creada:</span>
+                  <a href={cuResult.url} target="_blank" rel="noopener noreferrer"
+                     className="underline font-semibold hover:text-green-900">
+                    {cuResult.name}
+                  </a>
+                </>
+              ) : (
+                <span>✕ {cuResult.error}</span>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Alerta global si hay promos por vencer ── */}

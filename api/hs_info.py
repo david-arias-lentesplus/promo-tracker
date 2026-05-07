@@ -11,13 +11,17 @@ _API_DIR = os.path.dirname(os.path.abspath(__file__))
 if _API_DIR not in sys.path:
     sys.path.insert(0, _API_DIR)
 
-import time
+import json, time, urllib.request, urllib.error
 from datetime import date as _date, datetime, timezone
 from collections import defaultdict
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from _auth         import validate_token, json_response
 from _data_service import fetch_csv_text, load_image_map, parse_csv, apply_filters
+
+# ── ClickUp config ────────────────────────────────────────────
+_CU_LIST_ID  = '11443787'   # Lista LENTESPLUS en espacio DISEÑO
+_CU_ASSIGNEE = 3079982      # David Arias
 
 # ─── Helpers ──────────────────────────────────────────────────
 
@@ -100,9 +104,67 @@ class handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self.send_response(200)
         self.send_header('Access-Control-Allow-Origin',  '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Authorization, Content-Type')
         self.end_headers()
+
+    def do_POST(self):
+        is_valid, msg = validate_token(dict(self.headers))
+        if not is_valid:
+            return json_response(self, 401, {'status': 'error', 'message': msg})
+
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            body   = json.loads(self.rfile.read(length)) if length else {}
+        except Exception:
+            return json_response(self, 400, {'status': 'error', 'message': 'Body JSON inválido'})
+
+        action = body.get('action', '')
+
+        if action == 'create_clickup_task':
+            date_from  = (body.get('date_from') or '').strip()
+            task_name  = f"Home slider - {date_from}" if date_from else "Home slider"
+            api_token  = os.environ.get('CLICKUP_API_TOKEN', '').strip()
+
+            if not api_token:
+                return json_response(self, 500, {
+                    'status': 'error',
+                    'message': 'CLICKUP_API_TOKEN no está configurado en el servidor.',
+                })
+
+            payload = json.dumps({
+                'name':      task_name,
+                'assignees': [_CU_ASSIGNEE],
+            }).encode()
+
+            try:
+                req = urllib.request.Request(
+                    f'https://api.clickup.com/api/v2/list/{_CU_LIST_ID}/task',
+                    data=payload, method='POST',
+                    headers={
+                        'Authorization':  api_token,
+                        'Content-Type':   'application/json',
+                    },
+                )
+                with urllib.request.urlopen(req, timeout=15) as r:
+                    result = json.loads(r.read())
+            except urllib.error.HTTPError as e:
+                body_err = ''
+                try: body_err = e.read().decode('utf-8', errors='replace')[:300]
+                except Exception: pass
+                return json_response(self, 502, {
+                    'status':  'error',
+                    'message': f'ClickUp API error {e.code}: {body_err}',
+                })
+
+            return json_response(self, 200, {
+                'status':    'ok',
+                'task_id':   result.get('id'),
+                'task_url':  result.get('url'),
+                'task_name': task_name,
+            })
+
+        return json_response(self, 400, {'status': 'error', 'message': f'Acción desconocida: {action}'})
 
     def do_GET(self):
         is_valid, msg = validate_token(dict(self.headers))
