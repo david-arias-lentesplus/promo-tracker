@@ -78,6 +78,30 @@ WHERE order_number = '{order_number}'
 ORDER BY name
 """
 
+# Daily Sales: órdenes por hora del día seleccionado vs misma fecha de años anteriores.
+# Usa created_at (momento real del pedido) en lugar de updated_at (puede tener spikes por batch jobs).
+# Statuses: complete, holded, new, pending_payment, processing.
+# {tz_interval} → p.ej. "-5 hours" para Colombia (UTC-5); ajusta hora y fecha local.
+_SQL_DAILY_SALES = """
+SELECT
+    EXTRACT(HOUR FROM (created_at + INTERVAL '{tz_interval}'))::int  AS hour,
+    EXTRACT(YEAR FROM (created_at + INTERVAL '{tz_interval}'))::int  AS year,
+    ROUND(SUM(gmv_usd)::numeric, 2)                                  AS gmv_usd,
+    COUNT(order_number)                                              AS order_count
+FROM Silver.sales
+WHERE empresa = 'lentesplus'
+  AND status IN ('complete', 'holded', 'new', 'pending_payment', 'processing')
+  AND (
+      DATE(created_at + INTERVAL '{tz_interval}') = DATE('{date}')
+      OR DATE(created_at + INTERVAL '{tz_interval}') = (DATE('{date}') - INTERVAL '1 year')::date
+      OR DATE(created_at + INTERVAL '{tz_interval}') = (DATE('{date}') - INTERVAL '2 years')::date
+  )
+  {country_filter}
+GROUP BY EXTRACT(HOUR FROM (created_at + INTERVAL '{tz_interval}')),
+         EXTRACT(YEAR FROM (created_at + INTERVAL '{tz_interval}'))
+ORDER BY year, hour
+"""
+
 
 # ── MCP session cache ────────────────────────────────────────────────────────
 _mcp_session = {'session_id': None, 'ts': 0}
@@ -384,6 +408,59 @@ class handler(BaseHTTPRequestHandler):
                           'avg_price':float(r.get('avg_price') or 0)} for r in rows]
                 return json_response(self,200,{'status':'ok','date_from':date_from,
                     'date_to':date_to,'country':country,'total':len(data),'data':data})
+
+            # ── mode=daily_sales ─────────────────────────────
+            elif mode == 'daily_sales':
+                from datetime import date as _dt, timedelta as _td
+                date_param = (qs.get('date', [''])[0] or '').strip()
+                if not date_param:
+                    date_param = str(_dt.today() - _td(days=1))   # ayer por defecto
+
+                # Timezone offset: el frontend envía tz_offset en horas (p.ej. -5 para UTC-5)
+                try:
+                    tz_hours = float(qs.get('tz_offset', ['0'])[0] or '0')
+                    tz_hours = max(-12.0, min(14.0, tz_hours))   # rango válido de zonas horarias
+                except (ValueError, TypeError):
+                    tz_hours = 0.0
+                # Formato de intervalo PostgreSQL: "5 hours", "-5 hours", "5.5 hours"
+                tz_h_int = int(tz_hours)
+                tz_frac  = tz_hours - tz_h_int
+                if abs(tz_frac) < 0.01:
+                    tz_interval = f"{tz_h_int} hours"
+                else:
+                    # Media hora → expresar en minutos totales
+                    tz_interval = f"{int(tz_hours * 60)} minutes"
+
+                rows = _mcp_call(_SQL_DAILY_SALES.format(
+                    date=date_param.replace("'", "''"),
+                    country_filter=_country_filter(country),
+                    tz_interval=tz_interval,
+                ))
+                # Construir estructura: {year: {0..23: {gmv_usd, order_count}}}
+                by_year = {}
+                years_found = set()
+                for r in rows:
+                    yr = str(int(r.get('year') or 0))
+                    hr = int(r.get('hour') or 0)
+                    years_found.add(yr)
+                    if yr not in by_year:
+                        by_year[yr] = {}
+                    by_year[yr][hr] = {
+                        'gmv_usd':     round(float(r.get('gmv_usd')     or 0), 2),
+                        'order_count': int(r.get('order_count') or 0),
+                    }
+                # Rellenar horas faltantes con 0
+                for yr in by_year:
+                    for h in range(24):
+                        if h not in by_year[yr]:
+                            by_year[yr][h] = {'gmv_usd': 0.0, 'order_count': 0}
+                return json_response(self, 200, {
+                    'status':  'ok',
+                    'date':    date_param,
+                    'country': country,
+                    'years':   sorted(years_found),
+                    'data':    by_year,
+                })
 
             # ── mode=performance (default) ────────────────────
             else:

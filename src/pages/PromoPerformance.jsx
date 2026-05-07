@@ -1,11 +1,15 @@
 /**
  * 📄 /src/pages/PromoPerformance.jsx
- * Tabs: Promo Review | Product Tier List | Promo Analysis
+ * Tabs: Promo Review | Product Tier List | Promo Analysis | Daily Sales
  */
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import PageLoader from '../components/PageLoader'
 import { useFilters }  from '@context/FiltersContext'
 import { apiRequest }  from '@utils/api'
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, Legend, ResponsiveContainer,
+} from 'recharts'
 
 // ─── Icons ───────────────────────────────────────────────────
 const Ico = {
@@ -885,12 +889,344 @@ function PromoAnalysis({ country, dateFrom, dateTo, onLoaded }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// DAILY SALES
+// ═══════════════════════════════════════════════════════════════
+
+// Paleta de colores por año (el más reciente primero visualmente)
+const YEAR_COLORS = ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6']
+
+// Formatea hora como "00h", "01h", ..., "23h"
+function fmtHour(h) { return `${String(h).padStart(2,'0')}h` }
+
+// Tooltip personalizado del chart
+function DailyTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-xs">
+      <p className="font-bold text-gray-700 mb-1">{fmtHour(label)}</p>
+      {payload.map((p, i) => (
+        <div key={i} className="flex items-center gap-2 mb-0.5">
+          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{background: p.color}}/>
+          <span className="text-gray-500">{p.name}:</span>
+          <span className="font-semibold text-gray-900">
+            {p.value != null ? `$${p.value.toLocaleString('en-US', {minimumFractionDigits:0, maximumFractionDigits:0})}` : '—'}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function DailySales({ country, onLoaded }) {
+  // ── Estado ───────────────────────────────────────────────────
+  // Default: ayer
+  const yesterday = (() => {
+    const d = new Date(); d.setDate(d.getDate() - 1)
+    return d.toISOString().slice(0,10)
+  })()
+
+  const [selectedDate,  setSelectedDate]  = useState(yesterday)
+  const [chartData,     setChartData]     = useState([])   // [{hour, '2024': gmv, '2025': gmv, ...}]
+  const [years,         setYears]         = useState([])   // ['2024','2025','2026']
+  const [visibleYears,  setVisibleYears]  = useState(new Set())  // años activos en chart/tabla
+  const [kpis,          setKpis]          = useState({})   // {year: {total_gmv, total_orders, peak_hour}}
+  const [loading,       setLoading]       = useState(false)
+  const [error,         setError]         = useState(null)
+  const [totalsLoaded,  setTotalsLoaded]  = useState(false)
+  const [applyTz,       setApplyTz]       = useState(false) // aplicar offset de timezone del browser
+
+  // Offset real del browser en horas (p.ej. -5 para UTC-5)
+  const browserTzOffset = -(new Date().getTimezoneOffset()) / 60
+  const tzLabel = browserTzOffset === 0
+    ? 'UTC'
+    : `UTC${browserTzOffset > 0 ? '+' : ''}${browserTzOffset % 1 === 0 ? browserTzOffset : browserTzOffset.toFixed(1)}`
+
+  const toggleYear = yr =>
+    setVisibleYears(prev => {
+      const next = new Set(prev)
+      next.has(yr) ? next.delete(yr) : next.add(yr)
+      return next
+    })
+
+  // ── Fetch ────────────────────────────────────────────────────
+  const fetchData = useCallback(async () => {
+    setLoading(true); setError(null)
+    try {
+      const tzOffsetHours = applyTz ? browserTzOffset : 0
+      const params = new URLSearchParams({ mode: 'daily_sales', date: selectedDate, tz_offset: tzOffsetHours })
+      if (country && !['', 'TODOS', 'ALL'].includes(country.toUpperCase()))
+        params.set('country', country)
+      const res = await apiRequest(`/promo?${params}`)
+      if (res.status !== 'ok') throw new Error(res.message || 'Error al cargar')
+
+      const byYear = res.data || {}   // {year: {0..23: {gmv_usd, order_count}}}
+      const yrs    = res.years || Object.keys(byYear).sort()
+
+      // Construir array para Recharts: una entrada por hora
+      const rows = Array.from({length: 24}, (_, h) => {
+        const entry = { hour: h }
+        yrs.forEach(yr => {
+          entry[yr] = byYear[yr]?.[h]?.gmv_usd ?? null
+        })
+        return entry
+      })
+
+      // KPIs por año
+      const kpiMap = {}
+      yrs.forEach(yr => {
+        const hourData = byYear[yr] || {}
+        let totalGmv = 0, totalOrders = 0, peakGmv = -1, peakHour = 0
+        for (let h = 0; h < 24; h++) {
+          const d = hourData[h] || {}
+          const gmv = d.gmv_usd || 0
+          const ord = d.order_count || 0
+          totalGmv    += gmv
+          totalOrders += ord
+          if (gmv > peakGmv) { peakGmv = gmv; peakHour = h }
+        }
+        kpiMap[yr] = { totalGmv, totalOrders, peakHour, peakGmv }
+      })
+
+      setYears(yrs)
+      setVisibleYears(new Set(yrs))   // todos visibles por defecto al cargar nuevos datos
+      setChartData(rows)
+      setKpis(kpiMap)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+      setTotalsLoaded(true)
+      onLoaded?.()
+    }
+  }, [selectedDate, country, onLoaded, applyTz, browserTzOffset])
+
+  useEffect(() => { fetchData() }, [fetchData])
+
+  // ── Helpers UI ───────────────────────────────────────────────
+  const fmtUsd  = v => `$${(v||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})}`
+  const fmtDate = s => {
+    if (!s) return ''
+    const [y,m,d] = s.split('-')
+    return `${d}/${m}/${y}`
+  }
+
+  // ── Render ───────────────────────────────────────────────────
+  return (
+    <div>
+      {/* ── Header + date picker ── */}
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+        <div>
+          <h2 className="text-base font-black text-gray-900">Daily Sales</h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Ventas por hora · comparativo con años anteriores · GMV USD
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          {/* ── Switch timezone ── */}
+          <button
+            onClick={() => setApplyTz(v => !v)}
+            title={applyTz ? `Desactivar ajuste de timezone (ahora: ${tzLabel})` : `Activar ajuste de timezone (${tzLabel})`}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-colors select-none"
+            style={{
+              borderColor: applyTz ? '#2563eb' : '#e5e7eb',
+              background:  applyTz ? '#eff6ff' : '#f9fafb',
+            }}
+          >
+            {/* pill switch */}
+            <span className="relative inline-flex h-4 w-7 items-center rounded-full transition-colors"
+                  style={{background: applyTz ? '#2563eb' : '#d1d5db'}}>
+              <span className="inline-block h-3 w-3 rounded-full bg-white shadow transition-transform"
+                    style={{transform: applyTz ? 'translateX(14px)' : 'translateX(2px)'}}/>
+            </span>
+            <span className="text-xs font-semibold" style={{color: applyTz ? '#2563eb' : '#9ca3af'}}>
+              {applyTz ? tzLabel : 'UTC'}
+            </span>
+          </button>
+
+          <label className="text-xs text-gray-500 font-medium">Fecha</label>
+          <input
+            type="date"
+            value={selectedDate}
+            max={yesterday}
+            onChange={e => setSelectedDate(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-800
+                       focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+          />
+          <button
+            onClick={fetchData}
+            disabled={loading}
+            className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg
+                       hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          >
+            {loading ? 'Cargando…' : 'Actualizar'}
+          </button>
+        </div>
+      </div>
+
+      {/* ── Error ── */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700 mb-6">
+          {error}
+        </div>
+      )}
+
+      {/* ── KPI cards por año ── */}
+      {totalsLoaded && years.length > 0 && (
+        <div className="flex flex-wrap gap-3 mb-6">
+          {[...years].reverse().map((yr, i) => {
+            const k       = kpis[yr] || {}
+            const color   = YEAR_COLORS[i] || '#6b7280'
+            const visible = visibleYears.has(yr)
+            return (
+              <div
+                key={yr}
+                onClick={() => toggleYear(yr)}
+                title={visible ? `Ocultar ${yr}` : `Mostrar ${yr}`}
+                className="flex-1 min-w-[160px] rounded-xl p-4 cursor-pointer select-none transition-all"
+                style={{
+                  border: `2px solid ${visible ? color : '#e5e7eb'}`,
+                  background: visible ? '#fff' : '#f9fafb',
+                  opacity: visible ? 1 : 0.55,
+                }}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full transition-colors"
+                          style={{background: visible ? color : '#d1d5db'}}/>
+                    <span className="text-sm font-bold" style={{color: visible ? '#111827' : '#9ca3af'}}>{yr}</span>
+                  </div>
+                  <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full"
+                        style={{
+                          background: visible ? color + '20' : '#f3f4f6',
+                          color:      visible ? color        : '#9ca3af',
+                        }}>
+                    {visible ? 'ON' : 'OFF'}
+                  </span>
+                </div>
+                <p className="text-2xl font-black tabular-nums leading-none"
+                   style={{color: visible ? '#111827' : '#9ca3af'}}>
+                  {fmtUsd(k.totalGmv)}
+                </p>
+                <p className="text-xs mt-1" style={{color: visible ? '#6b7280' : '#9ca3af'}}>
+                  {(k.totalOrders||0).toLocaleString()} órdenes
+                </p>
+                {k.peakGmv > 0 && (
+                  <p className="text-xs mt-0.5" style={{color: visible ? '#9ca3af' : '#d1d5db'}}>
+                    Pico: {fmtHour(k.peakHour)} · {fmtUsd(k.peakGmv)}
+                  </p>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ── Chart ── */}
+      <div className="bg-white border border-gray-200 rounded-xl p-5">
+        {loading && !totalsLoaded ? (
+          <div className="flex justify-center items-center h-64">
+            <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"/>
+          </div>
+        ) : years.length === 0 && totalsLoaded ? (
+          <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+            <p className="text-4xl mb-2">📭</p>
+            <p className="text-sm font-medium">Sin datos para {fmtDate(selectedDate)}</p>
+            <p className="text-xs mt-1">Prueba con otra fecha o verifica el filtro de país</p>
+          </div>
+        ) : (
+          <>
+            <p className="text-xs text-gray-500 mb-3">
+              GMV USD por hora · {fmtDate(selectedDate)}
+              {country && !['TODOS','ALL'].includes(country.toUpperCase()) ? ` · ${country}` : ''}
+            </p>
+            <ResponsiveContainer width="100%" height={340}>
+              <LineChart data={chartData} margin={{top:5, right:20, left:10, bottom:5}}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
+                <XAxis
+                  dataKey="hour"
+                  tickFormatter={fmtHour}
+                  tick={{fontSize:11, fill:'#6b7280'}}
+                  interval={1}
+                />
+                <YAxis
+                  tickFormatter={v => `$${(v/1000).toFixed(0)}k`}
+                  tick={{fontSize:11, fill:'#6b7280'}}
+                  width={52}
+                />
+                <Tooltip content={<DailyTooltip/>}/>
+                <Legend
+                  formatter={(value) => <span style={{fontSize:12, color:'#374151'}}>{value}</span>}
+                />
+                {[...years].reverse().map((yr, i) => (
+                  visibleYears.has(yr) && (
+                    <Line
+                      key={yr}
+                      type="monotone"
+                      dataKey={yr}
+                      name={yr}
+                      stroke={YEAR_COLORS[i] || '#6b7280'}
+                      strokeWidth={i === 0 ? 2.5 : 1.5}
+                      dot={false}
+                      activeDot={{r: 4}}
+                      connectNulls={false}
+                    />
+                  )
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </>
+        )}
+      </div>
+
+      {/* ── Tabla resumen por hora ── */}
+      {totalsLoaded && years.length > 0 && (
+        <div className="mt-6 overflow-x-auto">
+          <table className="w-full text-xs text-right border-collapse">
+            <thead>
+              <tr className="border-b border-gray-200">
+                <th className="py-2 pr-3 text-left text-gray-500 font-semibold sticky left-0 bg-white">Hora</th>
+                {[...years].reverse().filter(yr => visibleYears.has(yr)).map(yr => (
+                  <th key={yr} className="py-2 px-3 text-gray-600 font-semibold">{yr}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {chartData.map(row => {
+                const visibleYrList = [...years].reverse().filter(yr => visibleYears.has(yr))
+                const hasAny = visibleYrList.some(yr => row[yr] != null && row[yr] > 0)
+                return (
+                  <tr key={row.hour} className={`border-b border-gray-100 ${hasAny ? '' : 'opacity-40'}`}>
+                    <td className="py-1.5 pr-3 text-left text-gray-500 font-mono sticky left-0 bg-white">
+                      {fmtHour(row.hour)}
+                    </td>
+                    {visibleYrList.map((yr, i) => {
+                      const colorIdx = [...years].reverse().indexOf(yr)
+                      return (
+                        <td key={yr} className="py-1.5 px-3 tabular-nums"
+                            style={{color: row[yr] > 0 ? YEAR_COLORS[colorIdx] : '#9ca3af'}}>
+                          {row[yr] != null && row[yr] > 0 ? fmtUsd(row[yr]) : '—'}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════
 // PÁGINA PRINCIPAL CON TABS
 // ═══════════════════════════════════════════════════════════════
 const TABS = [
-  { id:'review',   label:'Promo Review',     icon:'🏷️' },
-  { id:'tier',     label:'Product Tier List', icon:'🏆' },
-  { id:'analysis', label:'Promo Analysis',    icon:'📊' },
+  { id:'review',      label:'Promo Review',     icon:'🏷️' },
+  { id:'tier',        label:'Product Tier List', icon:'🏆' },
+  { id:'analysis',    label:'Promo Analysis',    icon:'📊' },
+  { id:'daily_sales', label:'Daily Sales',       icon:'📈' },
 ]
 
 export default function PromoPerformance() {
@@ -900,6 +1236,7 @@ export default function PromoPerformance() {
   const [loading, setLoading] = useState(true)
   const handleTabLoaded = () => setLoading(false)
   // Re-show loader whenever global filters (country / dates) change
+  // (Daily Sales has its own date filter — solo reacciona al país)
   const filterInitRef = useRef(false)
   useEffect(() => {
     if (!filterInitRef.current) { filterInitRef.current = true; return }
@@ -916,7 +1253,7 @@ export default function PromoPerformance() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit">
+      <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit flex-wrap">
         {TABS.map(t=>(
           <button key={t.id} onClick={()=>switchTab(t.id)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all
@@ -927,9 +1264,10 @@ export default function PromoPerformance() {
       </div>
 
       {/* Tab content */}
-      {activeTab==='review'   && <PromoReview    country={country} dateFrom={dateFrom} dateTo={dateTo} onLoaded={handleTabLoaded}/>}
-      {activeTab==='tier'     && <ProductTierList country={country} dateFrom={dateFrom} dateTo={dateTo} onLoaded={handleTabLoaded}/>}
-      {activeTab==='analysis' && <PromoAnalysis  country={country} dateFrom={dateFrom} dateTo={dateTo} onLoaded={handleTabLoaded}/>}
+      {activeTab==='review'      && <PromoReview    country={country} dateFrom={dateFrom} dateTo={dateTo} onLoaded={handleTabLoaded}/>}
+      {activeTab==='tier'        && <ProductTierList country={country} dateFrom={dateFrom} dateTo={dateTo} onLoaded={handleTabLoaded}/>}
+      {activeTab==='analysis'    && <PromoAnalysis  country={country} dateFrom={dateFrom} dateTo={dateTo} onLoaded={handleTabLoaded}/>}
+      {activeTab==='daily_sales' && <DailySales     country={country} onLoaded={handleTabLoaded}/>}
 
       <p className="text-xs text-gray-400 mt-4 text-right">Fuente: DWH · Silver.sales + Silver.sales_products · empresa = lentesplus</p>
     </div>
