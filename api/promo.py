@@ -78,26 +78,27 @@ WHERE order_number = '{order_number}'
 ORDER BY name
 """
 
-# Daily Sales: ventas por hora del día seleccionado vs misma fecha de años anteriores.
-# Máx 3 años × 24 horas = 72 filas.
+# Daily Sales: órdenes por hora del día seleccionado vs misma fecha de años anteriores.
+# Usa created_at (momento real del pedido) en lugar de updated_at (puede tener spikes por batch jobs).
+# Statuses: complete, holded, new, pending_payment, processing.
 # {tz_interval} → p.ej. "-5 hours" para Colombia (UTC-5); ajusta hora y fecha local.
 _SQL_DAILY_SALES = """
 SELECT
-    EXTRACT(HOUR FROM (updated_at + INTERVAL '{tz_interval}'))::int  AS hour,
-    EXTRACT(YEAR FROM (updated_at + INTERVAL '{tz_interval}'))::int  AS year,
+    EXTRACT(HOUR FROM (created_at + INTERVAL '{tz_interval}'))::int  AS hour,
+    EXTRACT(YEAR FROM (created_at + INTERVAL '{tz_interval}'))::int  AS year,
     ROUND(SUM(gmv_usd)::numeric, 2)                                  AS gmv_usd,
     COUNT(order_number)                                              AS order_count
 FROM Silver.sales
 WHERE empresa = 'lentesplus'
-  AND status = 'complete'
+  AND status IN ('complete', 'holded', 'new', 'pending_payment', 'processing')
   AND (
-      DATE(updated_at + INTERVAL '{tz_interval}') = DATE('{date}')
-      OR DATE(updated_at + INTERVAL '{tz_interval}') = (DATE('{date}') - INTERVAL '1 year')::date
-      OR DATE(updated_at + INTERVAL '{tz_interval}') = (DATE('{date}') - INTERVAL '2 years')::date
+      DATE(created_at + INTERVAL '{tz_interval}') = DATE('{date}')
+      OR DATE(created_at + INTERVAL '{tz_interval}') = (DATE('{date}') - INTERVAL '1 year')::date
+      OR DATE(created_at + INTERVAL '{tz_interval}') = (DATE('{date}') - INTERVAL '2 years')::date
   )
   {country_filter}
-GROUP BY EXTRACT(HOUR FROM (updated_at + INTERVAL '{tz_interval}')),
-         EXTRACT(YEAR FROM (updated_at + INTERVAL '{tz_interval}'))
+GROUP BY EXTRACT(HOUR FROM (created_at + INTERVAL '{tz_interval}')),
+         EXTRACT(YEAR FROM (created_at + INTERVAL '{tz_interval}'))
 ORDER BY year, hour
 """
 
