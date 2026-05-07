@@ -933,7 +933,7 @@ function DailySales({ country, onLoaded }) {
   const [loading,       setLoading]       = useState(false)
   const [error,         setError]         = useState(null)
   const [totalsLoaded,  setTotalsLoaded]  = useState(false)
-  const [applyTz,       setApplyTz]       = useState(true) // aplicar offset de timezone del browser
+  const [applyTz,       setApplyTz]       = useState(false) // aplicar offset de timezone del browser
 
   // Offset real del browser en horas (p.ej. -5 para UTC-5)
   const browserTzOffset = -(new Date().getTimezoneOffset()) / 60
