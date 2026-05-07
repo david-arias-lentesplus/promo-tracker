@@ -78,6 +78,27 @@ WHERE order_number = '{order_number}'
 ORDER BY name
 """
 
+# Daily Sales: ventas por hora del día seleccionado vs misma fecha de años anteriores.
+# Máx 3 años × 24 horas = 72 filas.
+_SQL_DAILY_SALES = """
+SELECT
+    EXTRACT(HOUR FROM updated_at)::int  AS hour,
+    EXTRACT(YEAR FROM updated_at)::int  AS year,
+    ROUND(SUM(gmv_usd)::numeric, 2)     AS gmv_usd,
+    COUNT(order_number)                 AS order_count
+FROM Silver.sales
+WHERE empresa = 'lentesplus'
+  AND status = 'complete'
+  AND (
+      DATE(updated_at) = DATE('{date}')
+      OR DATE(updated_at) = (DATE('{date}') - INTERVAL '1 year')::date
+      OR DATE(updated_at) = (DATE('{date}') - INTERVAL '2 years')::date
+  )
+  {country_filter}
+GROUP BY EXTRACT(HOUR FROM updated_at), EXTRACT(YEAR FROM updated_at)
+ORDER BY year, hour
+"""
+
 
 # ── MCP session cache ────────────────────────────────────────────────────────
 _mcp_session = {'session_id': None, 'ts': 0}
@@ -384,6 +405,42 @@ class handler(BaseHTTPRequestHandler):
                           'avg_price':float(r.get('avg_price') or 0)} for r in rows]
                 return json_response(self,200,{'status':'ok','date_from':date_from,
                     'date_to':date_to,'country':country,'total':len(data),'data':data})
+
+            # ── mode=daily_sales ─────────────────────────────
+            elif mode == 'daily_sales':
+                from datetime import date as _dt, timedelta as _td
+                date_param = (qs.get('date', [''])[0] or '').strip()
+                if not date_param:
+                    date_param = str(_dt.today() - _td(days=1))   # ayer por defecto
+                rows = _mcp_call(_SQL_DAILY_SALES.format(
+                    date=date_param.replace("'", "''"),
+                    country_filter=_country_filter(country),
+                ))
+                # Construir estructura: {year: {0..23: {gmv_usd, order_count}}}
+                by_year = {}
+                years_found = set()
+                for r in rows:
+                    yr = str(int(r.get('year') or 0))
+                    hr = int(r.get('hour') or 0)
+                    years_found.add(yr)
+                    if yr not in by_year:
+                        by_year[yr] = {}
+                    by_year[yr][hr] = {
+                        'gmv_usd':     round(float(r.get('gmv_usd')     or 0), 2),
+                        'order_count': int(r.get('order_count') or 0),
+                    }
+                # Rellenar horas faltantes con 0
+                for yr in by_year:
+                    for h in range(24):
+                        if h not in by_year[yr]:
+                            by_year[yr][h] = {'gmv_usd': 0.0, 'order_count': 0}
+                return json_response(self, 200, {
+                    'status':  'ok',
+                    'date':    date_param,
+                    'country': country,
+                    'years':   sorted(years_found),
+                    'data':    by_year,
+                })
 
             # ── mode=performance (default) ────────────────────
             else:
