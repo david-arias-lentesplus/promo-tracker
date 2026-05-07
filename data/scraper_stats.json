@@ -53,9 +53,21 @@
       ]
     },
     "2026-05": {
-      "calls": 79,
-      "units_used": 132,
+      "calls": 80,
+      "units_used": 133,
       "history": [
+        {
+          "id": "scr_20260507182359",
+          "timestamp": "2026-05-07T18:23:59.170208Z",
+          "tipo_promo": "Precio tachado",
+          "sku": "31JJAC120",
+          "url": "https://www.lentesplus.com/cl/producto/acuvue-oasys",
+          "elapsed_ms": 8438,
+          "units": 1,
+          "status": "ok",
+          "engine": "browserless",
+          "username": "david.arias"
+        },
         {
           "id": "scr_20260506203053",
           "timestamp": "2026-05-06T20:30:53.759816Z",
