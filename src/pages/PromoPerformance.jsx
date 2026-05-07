@@ -933,6 +933,13 @@ function DailySales({ country, onLoaded }) {
   const [loading,       setLoading]       = useState(false)
   const [error,         setError]         = useState(null)
   const [totalsLoaded,  setTotalsLoaded]  = useState(false)
+  const [applyTz,       setApplyTz]       = useState(true) // aplicar offset de timezone del browser
+
+  // Offset real del browser en horas (p.ej. -5 para UTC-5)
+  const browserTzOffset = -(new Date().getTimezoneOffset()) / 60
+  const tzLabel = browserTzOffset === 0
+    ? 'UTC'
+    : `UTC${browserTzOffset > 0 ? '+' : ''}${browserTzOffset % 1 === 0 ? browserTzOffset : browserTzOffset.toFixed(1)}`
 
   const toggleYear = yr =>
     setVisibleYears(prev => {
@@ -945,8 +952,7 @@ function DailySales({ country, onLoaded }) {
   const fetchData = useCallback(async () => {
     setLoading(true); setError(null)
     try {
-      // getTimezoneOffset() devuelve minutos de local→UTC (positivo en UTC-); invertimos para UTC offset real
-      const tzOffsetHours = -(new Date().getTimezoneOffset()) / 60
+      const tzOffsetHours = applyTz ? browserTzOffset : 0
       const params = new URLSearchParams({ mode: 'daily_sales', date: selectedDate, tz_offset: tzOffsetHours })
       if (country && !['', 'TODOS', 'ALL'].includes(country.toUpperCase()))
         params.set('country', country)
@@ -992,7 +998,7 @@ function DailySales({ country, onLoaded }) {
       setTotalsLoaded(true)
       onLoaded?.()
     }
-  }, [selectedDate, country, onLoaded])
+  }, [selectedDate, country, onLoaded, applyTz, browserTzOffset])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -1015,7 +1021,28 @@ function DailySales({ country, onLoaded }) {
             Ventas por hora · comparativo con años anteriores · GMV USD
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* ── Switch timezone ── */}
+          <button
+            onClick={() => setApplyTz(v => !v)}
+            title={applyTz ? `Desactivar ajuste de timezone (ahora: ${tzLabel})` : `Activar ajuste de timezone (${tzLabel})`}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-colors select-none"
+            style={{
+              borderColor: applyTz ? '#2563eb' : '#e5e7eb',
+              background:  applyTz ? '#eff6ff' : '#f9fafb',
+            }}
+          >
+            {/* pill switch */}
+            <span className="relative inline-flex h-4 w-7 items-center rounded-full transition-colors"
+                  style={{background: applyTz ? '#2563eb' : '#d1d5db'}}>
+              <span className="inline-block h-3 w-3 rounded-full bg-white shadow transition-transform"
+                    style={{transform: applyTz ? 'translateX(14px)' : 'translateX(2px)'}}/>
+            </span>
+            <span className="text-xs font-semibold" style={{color: applyTz ? '#2563eb' : '#9ca3af'}}>
+              {applyTz ? tzLabel : 'UTC'}
+            </span>
+          </button>
+
           <label className="text-xs text-gray-500 font-medium">Fecha</label>
           <input
             type="date"
