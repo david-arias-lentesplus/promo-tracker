@@ -122,7 +122,7 @@
       "dest": "/api/$1.py"
     },
     {
-      "src": "/(.*\\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|map))",
+      "src": "/(.*\\.(js|css|png|jpg|jpeg|svg|ico|woff|woff2|ttf|map))",
       "dest": "/$1"
     },
     {
