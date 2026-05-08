@@ -262,8 +262,30 @@ export default function HSInfo() {
   const [search,  setSearch]  = useState('')
 
   // ── ClickUp task creation ─────────────────────────────────
-  const [cuLoading, setCuLoading] = useState(false)
-  const [cuResult,  setCuResult]  = useState(null)  // {ok, url, name} | {error}
+  const [cuLoading,   setCuLoading]   = useState(false)
+  const [cuResult,    setCuResult]    = useState(null)  // {ok, url, name} | {error}
+  const [cuTasks,     setCuTasks]     = useState([])
+  const [cuTasksLoad, setCuTasksLoad] = useState(false)
+
+  // Filtro local por fabricante/promo (debe estar antes del callback de ClickUp)
+  const filtered = search.trim()
+    ? groups.filter(g =>
+        g.fabricante.toLowerCase().includes(search.toLowerCase()) ||
+        g.promo_marca.toLowerCase().includes(search.toLowerCase())
+      )
+    : groups
+
+  const fetchCuTasks = useCallback(async () => {
+    setCuTasksLoad(true)
+    try {
+      const res = await apiRequest('/hs_info?mode=tasks')
+      if (res.status === 'ok') setCuTasks(res.tasks || [])
+    } catch (_) {}
+    finally { setCuTasksLoad(false) }
+  }, [])
+
+  // Cargar tareas ClickUp al montar
+  useEffect(() => { fetchCuTasks() }, [fetchCuTasks])
 
   const createClickupTask = useCallback(async () => {
     setCuLoading(true); setCuResult(null)
@@ -271,10 +293,11 @@ export default function HSInfo() {
       const res = await apiRequest('/hs_info', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create_clickup_task', date_from: dateFrom }),
+        body: JSON.stringify({ action: 'create_clickup_task', date_from: dateFrom, groups: filtered }),
       })
       if (res.status === 'ok') {
         setCuResult({ ok: true, url: res.task_url, name: res.task_name })
+        fetchCuTasks()
       } else {
         setCuResult({ ok: false, error: res.message || 'Error desconocido' })
       }
@@ -282,10 +305,9 @@ export default function HSInfo() {
       setCuResult({ ok: false, error: e.message || 'Error al conectar con el servidor' })
     } finally {
       setCuLoading(false)
-      // Limpiar el resultado después de 8 segundos
       setTimeout(() => setCuResult(null), 8000)
     }
-  }, [dateFrom])
+  }, [dateFrom, filtered, fetchCuTasks])
 
   const fetchData = useCallback(async () => {
     setLoading(true); setError('')
@@ -317,14 +339,6 @@ export default function HSInfo() {
       fetchData()
     }
   }, [country, dateFrom, dateTo, fetchData])
-
-  // Filtro local por fabricante/promo
-  const filtered = search.trim()
-    ? groups.filter(g =>
-        g.fabricante.toLowerCase().includes(search.toLowerCase()) ||
-        g.promo_marca.toLowerCase().includes(search.toLowerCase())
-      )
-    : groups
 
   const expiringSoon = groups.filter(g => g.is_expiring_soon).length
 
@@ -406,6 +420,51 @@ export default function HSInfo() {
           )}
         </div>
       </div>
+
+      {/* ── Tabla de tareas ClickUp HS ─────────────────────────── */}
+      {(cuTasks.length > 0 || cuTasksLoad) && (
+        <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-200">
+            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+              Tareas ClickUp — HS
+            </span>
+            <button onClick={fetchCuTasks} disabled={cuTasksLoad}
+              className="text-xs text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50">
+              {cuTasksLoad ? 'Actualizando…' : '↺ Refrescar'}
+            </button>
+          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-xs text-gray-500 border-b border-gray-100">
+                <th className="text-left px-4 py-2 font-medium">Tarea</th>
+                <th className="text-left px-4 py-2 font-medium">ID</th>
+                <th className="text-left px-4 py-2 font-medium">Status</th>
+                <th className="px-4 py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {cuTasks.map(t => (
+                <tr key={t.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                  <td className="px-4 py-2.5 font-medium text-gray-800">{t.name}</td>
+                  <td className="px-4 py-2.5 font-mono text-xs text-gray-400">{t.id}</td>
+                  <td className="px-4 py-2.5">
+                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold text-white"
+                      style={{ backgroundColor: t.color || '#6b7280' }}>
+                      {t.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2.5 text-right">
+                    <a href={t.url} target="_blank" rel="noopener noreferrer"
+                       className="text-violet-500 hover:text-violet-700 transition-colors text-xs font-medium">
+                      Abrir ↗
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* ── Alerta global si hay promos por vencer ── */}
       {!loading && expiringSoon > 0 && (
