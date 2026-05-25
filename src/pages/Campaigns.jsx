@@ -2,7 +2,7 @@
  * 📄 /src/pages/Campaigns.jsx
  * Agente 1 — Frontend (Skill B)
  * Layout: modelos en columna izquierda, filtros en sidebar derecha
- * Tres modelos: BestSeller · Fabricantes · Gafas
+ * Cuatro modelos: BestSeller · Fabricantes · Gafas · Todas las Promos
  * Rank badges de ventas reales (DWH) en BestSeller y Fabricantes.
  * Design System: LIVO
  */
@@ -59,6 +59,15 @@ const IconTag = ({ size = 12 }) => (
     <line x1="7" y1="7" x2="7.01" y2="7"/>
   </svg>
 )
+const IconCalendar = ({ size = 11 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="4" width="18" height="18" rx="2"/>
+    <line x1="16" y1="2" x2="16" y2="6"/>
+    <line x1="8" y1="2" x2="8" y2="6"/>
+    <line x1="3" y1="10" x2="21" y2="10"/>
+  </svg>
+)
 const IconFilter = ({ size = 14 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
     strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -91,6 +100,48 @@ function UseBadges({ use_type, use_duration }) {
       {use_duration && (
         <span className="inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-orange-50 text-orange-700 border border-orange-100 whitespace-nowrap">
           {use_duration}
+        </span>
+      )}
+    </div>
+  )
+}
+
+// ─── Util: calcular días restantes desde date_end ────────────
+function _daysFromEnd(dateEnd) {
+  if (!dateEnd) return null
+  try {
+    const end   = new Date(dateEnd + 'T12:00:00')
+    const today = new Date(); today.setHours(12, 0, 0, 0)
+    return Math.round((end - today) / 86_400_000)
+  } catch { return null }
+}
+
+// ─── PromoDatesRow — fechas y días restantes (estilo HSInfo) ──
+function PromoDatesRow({ dateStart, dateEnd, daysRemaining, isExpiringSoon }) {
+  if (!dateStart && !dateEnd) return null
+
+  // Si el backend no envió days_remaining (BestSeller), calcularlo aquí
+  const days = daysRemaining !== null && daysRemaining !== undefined
+    ? daysRemaining
+    : _daysFromEnd(dateEnd)
+
+  const isExpired     = days !== null && days < 0
+  const expiringSoon  = isExpiringSoon || (days !== null && days >= 0 && days <= 3)
+
+  let pillCls = 'bg-green-50 text-green-700 border border-green-100'
+  let pillTxt = days !== null ? (days === 0 ? '¡Hoy!' : `${days}d restantes`) : null
+  if (isExpired)      { pillCls = 'bg-red-100 text-red-700 border border-red-200';       pillTxt = 'Vencida' }
+  else if (expiringSoon) { pillCls = 'bg-amber-100 text-amber-700 border border-amber-200' }
+  else if (days !== null && days <= 10) { pillCls = 'bg-yellow-50 text-yellow-700 border border-yellow-200' }
+  return (
+    <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+      <span className="text-gray-400"><IconCalendar size={11}/></span>
+      <span className="text-[10px] font-medium text-gray-500">{_fmt(dateStart)}</span>
+      <span className="text-[10px] text-gray-300">→</span>
+      <span className="text-[10px] font-medium text-gray-500">{_fmt(dateEnd)}</span>
+      {pillTxt && (
+        <span className={`ml-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold ${pillCls}`}>
+          {pillTxt}
         </span>
       )}
     </div>
@@ -192,6 +243,7 @@ const TABS = [
   { id: 'bestseller',  label: 'BestSeller' },
   { id: 'fabricantes', label: 'Fabricantes' },
   { id: 'gafas',       label: 'Gafas' },
+  { id: 'all_promos',  label: 'Todas las Promos' },
 ]
 
 // ─── Rank lookup helpers ──────────────────────────────────────
@@ -231,13 +283,38 @@ function getRank(sku, name, rankMap) {
 }
 
 // ─── BestSeller Section ───────────────────────────────────────
-function BestSellerSection({ data, selectedIds, onToggle, rankMap }) {
+function BestSellerSection({ data, rankMap }) {
   if (!data) return null
   const { products: rawProducts, email_copy } = data
 
-  // Sort: J&J first, then by DWH sales rank, unranked last
+  // Deduplicar por SKU: si un producto tiene varias promos, mostrar todas
   const products = useMemo(() => {
-    return [...rawProducts].sort((a, b) => {
+    const skuMap = new Map()
+    rawProducts.forEach(p => {
+      const key = p.sku || p.product_name
+      if (!skuMap.has(key)) {
+        skuMap.set(key, { ...p, promos: [] })
+      }
+      const existing = skuMap.get(key)
+      if (p.promo_marca) {
+        const alreadyHas = existing.promos.some(
+          pr => pr.promo_marca === p.promo_marca && pr.date_start === p.date_start
+        )
+        if (!alreadyHas) {
+          existing.promos.push({
+            promo_marca:     p.promo_marca,
+            total_desc_pct:  p.total_desc_pct,
+            date_start:      p.date_start,
+            date_end:        p.date_end,
+            days_remaining:  p.days_remaining,
+            is_expiring_soon: p.is_expiring_soon,
+          })
+        }
+      }
+    })
+
+    // Sort: J&J first, luego por rank DWH, sin rank al final
+    return [...skuMap.values()].sort((a, b) => {
       const aIsJJ = (a.fabricante || '').toLowerCase().includes('johnson')
       const bIsJJ = (b.fabricante || '').toLowerCase().includes('johnson')
       if (aIsJJ && !bIsJJ) return -1
@@ -251,12 +328,10 @@ function BestSellerSection({ data, selectedIds, onToggle, rankMap }) {
     })
   }, [rawProducts, rankMap])
 
-  const selCount = products.filter(p => selectedIds.has(p.sku)).length
-
   return (
     <div>
       <p className="text-sm text-gray-500 mb-4">
-        Los 6 mejores productos con promo activa de diferentes fabricantes.
+        Los mejores productos con promo activa de diferentes fabricantes.
         <span className="ml-1 text-[#0000E1] font-semibold">Johnson &amp; Johnson</span> siempre aparece primero.
         {rankMap && <span className="ml-1 text-gray-400">· Ordenados por ventas reales del DWH.</span>}
       </p>
@@ -267,20 +342,20 @@ function BestSellerSection({ data, selectedIds, onToggle, rankMap }) {
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
             {products.map(p => {
-              const sel     = selectedIds.has(p.sku)
               const rankInfo = getRank(p.sku, p.product_name, rankMap)
+              // Promos: usar array deduplicado, o caer en campo suelto si no hay
+              const promos = p.promos && p.promos.length > 0
+                ? p.promos
+                : p.promo_marca
+                  ? [{ promo_marca: p.promo_marca, total_desc_pct: p.total_desc_pct,
+                       date_start: p.date_start, date_end: p.date_end,
+                       days_remaining: p.days_remaining, is_expiring_soon: p.is_expiring_soon }]
+                  : []
+
               return (
                 <div key={p.sku || p.product_name}
-                  onClick={() => onToggle(p.sku)}
-                  className={`card p-4 cursor-pointer transition-all duration-150 border-2
-                    ${sel ? 'border-[#0000E1] bg-blue-50/40' : 'border-transparent hover:border-gray-200'}`}>
+                  className="card p-4 border-2 border-transparent hover:border-gray-200 transition-all duration-150">
                   <div className="flex items-start gap-3">
-                    {/* Checkbox */}
-                    <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all
-                      ${sel ? 'bg-[#0000E1] border-[#0000E1]' : 'border-gray-300'}`}>
-                      {sel && <IconCheck size={11}/>}
-                    </div>
-
                     {/* Sales rank badge */}
                     {rankInfo && (
                       <div className="flex-shrink-0 flex items-start pt-0.5">
@@ -312,15 +387,31 @@ function BestSellerSection({ data, selectedIds, onToggle, rankMap }) {
                       )}
                     </div>
                   </div>
-                  {p.promo_marca && (
-                    <div className="mt-3 pt-3 border-t border-gray-100 flex items-start gap-1.5">
-                      <span className="text-[#0000E1] mt-0.5 flex-shrink-0"><IconTag size={11}/></span>
-                      <p className="text-[11px] text-[#0000E1] font-semibold leading-snug">{p.promo_marca}</p>
-                      {p.total_desc_pct > 0 && (
-                        <span className="ml-auto text-[11px] font-black bg-[#DEFF00] text-black px-1.5 py-0.5 rounded-full flex-shrink-0">
-                          -{p.total_desc_pct}%
-                        </span>
-                      )}
+
+                  {/* Promos — una o varias */}
+                  {promos.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
+                      {promos.map((promo, idx) => (
+                        <div key={idx}>
+                          <div className="flex items-start gap-1.5">
+                            <span className="text-[#0000E1] mt-0.5 flex-shrink-0"><IconTag size={11}/></span>
+                            <p className="text-[11px] text-[#0000E1] font-semibold leading-snug flex-1">
+                              {promo.promo_marca}
+                            </p>
+                            {promo.total_desc_pct > 0 && (
+                              <span className="text-[11px] font-black bg-[#DEFF00] text-black px-1.5 py-0.5 rounded-full flex-shrink-0">
+                                -{promo.total_desc_pct}%
+                              </span>
+                            )}
+                          </div>
+                          <PromoDatesRow
+                            dateStart={promo.date_start}
+                            dateEnd={promo.date_end}
+                            daysRemaining={promo.days_remaining}
+                            isExpiringSoon={promo.is_expiring_soon}
+                          />
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -328,11 +419,6 @@ function BestSellerSection({ data, selectedIds, onToggle, rankMap }) {
             })}
           </div>
 
-          {selCount > 0 && (
-            <div className="mb-2 text-xs text-[#0000E1] font-semibold">
-              {selCount} producto{selCount>1?'s':''} seleccionado{selCount>1?'s':''}
-            </div>
-          )}
           <EmailCopyPanel copy={email_copy} title="Email Copy — BestSeller" />
         </>
       )}
@@ -562,6 +648,168 @@ function GafasSection({ data, selectedGroupIds, onToggleGroup }) {
   )
 }
 
+// ─── buildAllPromos — helper que agrega TODAS las promos ──────
+function buildAllPromos(campaignData) {
+  const seen = new Set()
+  const all  = []
+
+  const addPromo = (p, promoMarca, dateStart, dateEnd, daysRemaining, isExpiringSoon, descPct) => {
+    const key = `${p.sku || p.product_name}|${promoMarca}|${dateStart}`
+    if (seen.has(key)) return
+    seen.add(key)
+    all.push({
+      ...p,
+      promo_marca:     promoMarca,
+      date_start:      dateStart,
+      date_end:        dateEnd,
+      days_remaining:  daysRemaining,
+      is_expiring_soon: isExpiringSoon,
+      total_desc_pct:  descPct ?? p.total_desc_pct,
+    })
+  }
+
+  // Fabricantes
+  ;(campaignData?.fabricantes?.groups || []).forEach(g =>
+    g.products.forEach(p => addPromo(p, g.promo_marca, g.date_start, g.date_end, g.days_remaining, g.is_expiring_soon, null))
+  )
+  // Gafas
+  ;(campaignData?.gafas?.groups || []).forEach(g =>
+    g.products.forEach(p => addPromo(p, g.promo_marca, g.date_start, g.date_end, g.days_remaining, g.is_expiring_soon, null))
+  )
+  // BestSeller — cubre promos que no estén en los grupos anteriores
+  ;(campaignData?.bestseller?.products || []).forEach(p => {
+    if (p.promo_marca) addPromo(p, p.promo_marca, p.date_start, p.date_end, p.days_remaining, p.is_expiring_soon, p.total_desc_pct)
+  })
+
+  return all
+}
+
+// ─── AllPromos Section ────────────────────────────────────────
+function AllPromosSection({ campaignData, rankMap }) {
+  const [brandFilter, setBrandFilter] = useState('')
+
+  const allPromos = useMemo(() => buildAllPromos(campaignData), [campaignData])
+
+  const brandNames = useMemo(() => {
+    const s = new Set()
+    allPromos.forEach(p => { if (p.fabricante) s.add(p.fabricante) })
+    return [...s].sort()
+  }, [allPromos])
+
+  const visible = useMemo(() => {
+    const base = brandFilter ? allPromos.filter(p => p.fabricante === brandFilter) : allPromos
+    // Sort: J&J first, then DWH rank, then days_remaining asc, unranked last
+    return [...base].sort((a, b) => {
+      const aIsJJ = (a.fabricante || '').toLowerCase().includes('johnson')
+      const bIsJJ = (b.fabricante || '').toLowerCase().includes('johnson')
+      if (aIsJJ && !bIsJJ) return -1
+      if (!aIsJJ && bIsJJ) return  1
+      const ra = getRank(a.sku, a.product_name, rankMap)
+      const rb = getRank(b.sku, b.product_name, rankMap)
+      if (ra && !rb) return -1
+      if (!ra && rb) return  1
+      if (ra && rb) return ra.rank - rb.rank
+      const da = a.days_remaining ?? 9999
+      const db = b.days_remaining ?? 9999
+      return da - db
+    })
+  }, [allPromos, brandFilter, rankMap])
+
+  if (allPromos.length === 0) return <EmptyState msg="No hay promos disponibles en este período." />
+
+  return (
+    <div>
+      <p className="text-sm text-gray-500 mb-4">
+        Todas las promos disponibles en el período seleccionado — todos los fabricantes y categorías.
+        {rankMap && <span className="ml-1 text-gray-400">· Ordenados por ventas reales del DWH.</span>}
+        <span className="ml-2 text-gray-400 font-medium">{visible.length} promo{visible.length !== 1 ? 's' : ''}</span>
+      </p>
+
+      {/* Filtro por fabricante */}
+      <div className="flex items-center gap-2 flex-wrap mb-5">
+        {['', ...brandNames].map(b => (
+          <button key={b || '__all'}
+            onClick={() => setBrandFilter(b)}
+            className={`h-8 px-3 rounded-full text-xs font-semibold border transition-all duration-150
+              ${brandFilter === b
+                ? 'bg-[#0000E1] text-white border-[#0000E1]'
+                : 'bg-white text-gray-600 border-gray-200 hover:border-[#0000E1] hover:text-[#0000E1]'}`}>
+            {b || 'Todos'}
+          </button>
+        ))}
+      </div>
+
+      {visible.length === 0 ? (
+        <EmptyState msg="No hay promos activas para este fabricante en el período." />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {visible.map((p, idx) => {
+            const rankInfo = getRank(p.sku, p.product_name, rankMap)
+            const isExpired = p.days_remaining !== null && p.days_remaining !== undefined && p.days_remaining < 0
+            return (
+              <div key={`${p.sku || p.product_name}|${p.promo_marca}|${p.date_start}|${idx}`}
+                className={`card p-4 border-2 transition-all duration-150
+                  ${p.is_expiring_soon && !isExpired ? 'border-amber-200' : isExpired ? 'border-red-100' : 'border-transparent hover:border-gray-200'}`}>
+                <div className="flex items-start gap-3">
+                  {rankInfo && (
+                    <div className="flex-shrink-0 flex items-start pt-0.5">
+                      <SalesBadge rank={rankInfo.rank} qty={rankInfo.qty} size="md" />
+                    </div>
+                  )}
+                  <ProductThumb url={p.url_image} name={p.product_name} size="lg" />
+                  <div className="min-w-0 flex-1">
+                    {p.product_url
+                      ? <a href={p.product_url} target="_blank" rel="noopener noreferrer"
+                            className="text-xs font-bold text-[#0000E1] leading-snug line-clamp-2 hover:underline block">
+                          {p.product_name}
+                        </a>
+                      : <p className="text-xs font-bold text-gray-800 leading-snug line-clamp-2">{p.product_name}</p>
+                    }
+                    {p.sku && <p className="text-[11px] text-gray-400 font-mono mt-0.5">{p.sku}</p>}
+                    <p className="text-xs font-semibold text-gray-500 mt-0.5 truncate">{p.fabricante}</p>
+                    {p.product_type && (
+                      <span className="inline-flex mt-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 text-purple-600 border border-purple-100">
+                        {p.product_type}
+                      </span>
+                    )}
+                    <UseBadges use_type={p.use_type} use_duration={p.use_duration} />
+                    {rankInfo && (
+                      <p className="text-[10px] text-gray-400 mt-1">
+                        {rankInfo.orders.toLocaleString()} órdenes · ${rankInfo.gmv.toLocaleString('en-US',{maximumFractionDigits:0})} GMV
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Promo info + fechas */}
+                {p.promo_marca && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <div className="flex items-start gap-1.5">
+                      <span className="text-[#0000E1] mt-0.5 flex-shrink-0"><IconTag size={11}/></span>
+                      <p className="text-[11px] text-[#0000E1] font-semibold leading-snug flex-1">{p.promo_marca}</p>
+                      {p.total_desc_pct > 0 && (
+                        <span className="text-[11px] font-black bg-[#DEFF00] text-black px-1.5 py-0.5 rounded-full flex-shrink-0">
+                          -{p.total_desc_pct}%
+                        </span>
+                      )}
+                    </div>
+                    <PromoDatesRow
+                      dateStart={p.date_start}
+                      dateEnd={p.date_end}
+                      daysRemaining={p.days_remaining}
+                      isExpiringSoon={p.is_expiring_soon}
+                    />
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Empty state ─────────────────────────────────────────────
 function EmptyState({ msg }) {
   return (
@@ -694,7 +942,6 @@ export default function Campaigns() {
   const [useTypeFilter,  setUseTypeFilter]  = useState('')
   const [useDurFilter,   setUseDurFilter]   = useState('')
   const [brandFilter,    setBrandFilter]    = useState('')
-  const [selectedBs,     setSelectedBs]     = useState(new Set())
   const [selectedGroups, setSelectedGroups] = useState(new Set())
 
   // DWH rank data for sales badges
@@ -760,7 +1007,7 @@ export default function Campaigns() {
     if (p.country!==country || p.dateFrom!==dateFrom || p.dateTo!==dateTo
         || p.typeFilter!==typeFilter || p.useTypeFilter!==useTypeFilter || p.useDurFilter!==useDurFilter) {
       prevRef.current = { country, dateFrom, dateTo, typeFilter, useTypeFilter, useDurFilter }
-      setSelectedBs(new Set()); setSelectedGroups(new Set())
+      setSelectedGroups(new Set())
       fetchData()
       fetchDwhRank()
     }
@@ -772,12 +1019,11 @@ export default function Campaigns() {
       use_type:     overrides.use_type     !== undefined ? overrides.use_type     : useTypeFilter,
       use_duration: overrides.use_duration !== undefined ? overrides.use_duration : useDurFilter,
     }
-    setSelectedBs(new Set()); setSelectedGroups(new Set())
+    setSelectedGroups(new Set())
     fetchData(merged)
   }
 
-  const toggleBs    = sku => setSelectedBs(s => { const n=new Set(s); n.has(sku)?n.delete(sku):n.add(sku); return n })
-  const toggleGroup = id  => setSelectedGroups(s => { const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n })
+  const toggleGroup = id => setSelectedGroups(s => { const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n })
 
   return (
     <div className="animate-fade-in">
@@ -845,8 +1091,6 @@ export default function Campaigns() {
               {activeTab === 'bestseller' && (
                 <BestSellerSection
                   data={campaignData?.bestseller}
-                  selectedIds={selectedBs}
-                  onToggle={toggleBs}
                   rankMap={rankMap}
                 />
               )}
@@ -867,6 +1111,12 @@ export default function Campaigns() {
                   onToggleGroup={toggleGroup}
                 />
               )}
+              {activeTab === 'all_promos' && (
+                <AllPromosSection
+                  campaignData={campaignData}
+                  rankMap={rankMap}
+                />
+              )}
             </>
           )}
         </div>
@@ -882,16 +1132,16 @@ export default function Campaigns() {
       </div>
 
       {/* ── Floating selection bar ────────────────────── */}
-      {(selectedBs.size + selectedGroups.size) > 0 && (
+      {selectedGroups.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50
                          bg-[#0000E1] text-white rounded-full px-6 py-3
                          flex items-center gap-4 shadow-xl shadow-blue-900/30">
           <span className="text-sm font-bold">
-            {selectedBs.size + selectedGroups.size} seleccionado{(selectedBs.size+selectedGroups.size)>1?'s':''}
+            {selectedGroups.size} seleccionado{selectedGroups.size > 1 ? 's' : ''}
           </span>
           <div className="w-px h-4 bg-white/30"/>
           <button
-            onClick={() => { setSelectedBs(new Set()); setSelectedGroups(new Set()) }}
+            onClick={() => setSelectedGroups(new Set())}
             className="text-sm font-semibold text-white/80 hover:text-white transition-colors">
             Limpiar
           </button>
