@@ -1015,6 +1015,24 @@
           "engine": "browserless"
         }
       ]
+    },
+    "2026-06": {
+      "calls": 1,
+      "units_used": 1,
+      "history": [
+        {
+          "id": "scr_20260601224238",
+          "timestamp": "2026-06-01T22:42:38.813950Z",
+          "tipo_promo": "Precio tachado",
+          "sku": "21ALAO102",
+          "url": "https://www.lentesplus.com/co/producto/air-optix-colors-formulados",
+          "elapsed_ms": 9669,
+          "units": 1,
+          "status": "ok",
+          "engine": "browserless",
+          "username": "david.arias"
+        }
+      ]
     }
   },
   "plan": {
